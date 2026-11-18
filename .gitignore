@@ -24,3 +24,7 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Local experiment database
+*.sqlite3
+*.sqlite3-*
