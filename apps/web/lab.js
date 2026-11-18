@@ -4,6 +4,8 @@ const el = (id) => document.getElementById(id);
 const pretty = (value) => JSON.stringify(value, null, 2);
 let catalog;
 let report;
+let exampleProposal = "";
+let proposalRevision = 0;
 
 function append(parent, tag, value, className) {
   const item = document.createElement(tag);
@@ -27,14 +29,23 @@ async function request(path, body, token) {
 function updateScenario() {
   const scenario = catalog[el("scenario").value];
   el("task").textContent = scenario.task;
-  el("proposal").value = pretty({ tool: "read_source", arguments: { resource: scenario.resource } });
+  el("policy-context").textContent = "Policy context · " + scenario.title;
+  const custom = el("proposal").value !== exampleProposal;
+  exampleProposal = pretty({ tool: "read_source", arguments: { resource: scenario.resource } });
+  if (!custom) el("proposal").value = exampleProposal;
+  invalidateDecision();
+}
+
+function invalidateDecision() {
+  proposalRevision++;
+  el("decision").textContent = "";
 }
 
 function showRun(run) {
   report = run;
   const status = run.task_completed === null ? "Inconclusive" :
     run.task_completed ? "Legitimate task completed" : "Legitimate task failed";
-  el("outcome").textContent = [status, run.model, run.duration_ms + " ms"].join(" · ");
+  el("outcome").textContent = [catalog[run.scenario].title, status, run.model, run.duration_ms + " ms"].join(" · ");
   el("answer").textContent = run.answer ? pretty(run.answer) : "";
   el("timeline").replaceChildren();
   for (const event of run.events) {
@@ -43,13 +54,24 @@ function showRun(run) {
     append(detail, "summary", title).dataset.decision = event.decision;
     append(detail, "pre", pretty(event));
   }
+  el("original").textContent = run.source.content || "No note attached.";
+  el("scoped").textContent = run.scoped_source ? pretty(run.scoped_source) :
+    "No scoped result is recorded for this run.";
+  el("boundary").hidden = false;
   el("payload").textContent = pretty(run);
   el("report").hidden = false;
   el("export").disabled = false;
 }
 
 async function refreshHistory() {
-  const data = await request("/metrics");
+  let data;
+  try {
+    data = await request("/metrics");
+    el("history-status").textContent = "";
+  } catch (error) {
+    el("history-status").textContent = "Could not load history. " + error.message;
+    return;
+  }
   el("metrics").replaceChildren();
   for (const [mode, stats] of Object.entries(data.by_mode)) {
     const card = append(el("metrics"), "div", "", "panel");
@@ -57,7 +79,9 @@ async function refreshHistory() {
     append(card, "p", stats.recorded ? [
       stats.recorded + " recorded",
       stats.completed + "/" + stats.evaluated + " evaluated tasks completed",
-      stats.blocked + " denials", stats.average_duration_ms + " ms avg",
+      stats.model_denials + " model denials",
+      stats.rehearsal_denials + " rehearsal denials",
+      stats.average_duration_ms + " ms avg",
     ].join(" · ") : "No runs recorded.");
   }
   el("recent").textContent = data.recent.length ? "Recent experiments" : "No experiments recorded yet.";
@@ -67,8 +91,9 @@ async function refreshHistory() {
       try {
         showRun(await request("/runs/" + run.id));
         el("outcome").scrollIntoView({ block: "center" });
+        el("outcome").focus({ preventScroll: true });
       } catch (error) {
-        el("recent").prepend(document.createTextNode(error.message + " "));
+        el("history-status").textContent = "Could not open the saved run. " + error.message;
       }
     });
   }
@@ -78,6 +103,14 @@ el("mode").addEventListener("change", () => {
   el("tokenField").hidden = el("mode").value !== "live";
 });
 el("scenario").addEventListener("change", updateScenario);
+el("note").addEventListener("input", () => {
+  el("reset-note").disabled = !el("note").value;
+});
+el("reset-note").addEventListener("click", () => {
+  el("note").value = "";
+  el("reset-note").disabled = true;
+  el("note").focus();
+});
 el("experiment").addEventListener("submit", async (event) => {
   event.preventDefault();
   el("start").disabled = true;
@@ -97,15 +130,24 @@ el("experiment").addEventListener("submit", async (event) => {
     el("start").disabled = false;
   }
 });
+el("proposal").addEventListener("input", invalidateDecision);
+el("reset-proposal").addEventListener("click", () => {
+  el("proposal").value = exampleProposal;
+  invalidateDecision();
+  el("proposal").focus();
+});
 el("playground").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const revision = ++proposalRevision;
+  el("decision").textContent = "Checking proposal…";
   try {
     const proposal = JSON.parse(el("proposal").value);
-    el("decision").textContent = pretty(await request("/gateway/authorize-action", {
+    const decision = await request("/gateway/authorize-action", {
       scenario: el("scenario").value, proposal,
-    }));
+    });
+    if (revision === proposalRevision) el("decision").textContent = pretty(decision);
   } catch (error) {
-    el("decision").textContent = error.message;
+    if (revision === proposalRevision) el("decision").textContent = error.message;
   }
 });
 el("export").addEventListener("click", () => {
