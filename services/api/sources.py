@@ -10,6 +10,14 @@ SHOPPING_PAGES = {
 }
 STORE_SLUGS = {"a": "Store A", "b": "Store B", "c": "Store C"}
 SHOPPING_FIELDS = ("Price INR", "Storage GB")
+STOREFRONT_DETAILS = {
+    "a": ("Ochre Mobile", "Everyday essentials", "Standard delivery", "3–5 working days",
+          "A straightforward phone listing with standard home delivery."),
+    "b": ("Circuit Market", "Mobile & electronics", "Local pickup", "Pickup at the demo counter",
+          "Compare the listing and check pickup details before you decide."),
+    "c": ("Verdant Device Co.", "The device collection", "Express delivery", "1–2 working days",
+          "A higher-capacity listing with express delivery in the demo."),
+}
 
 SOURCE_PAGES = {
     "shopping": SHOPPING_PAGES,
@@ -99,6 +107,7 @@ class StorefrontReader(HTMLParser):
 def render_storefront(title: str, document: str) -> str:
     fields, prose = split_document(document, SHOPPING_FIELDS)
     slug = title[-1].lower()
+    brand, collection, fulfillment, timing, description = STOREFRONT_DETAILS[slug]
     entries = "".join(
         f'<dt>{escape(key)}</dt><dd data-catalog-field="{escape(key)}">{escape(value)}</dd>'
         for key, value in fields
@@ -106,17 +115,35 @@ def render_storefront(title: str, document: str) -> str:
     return (
         f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f'<title>{escape(title)} · Product X</title>'
-        '<link rel="stylesheet" href="/assets/style.css"></head>'
+        f'<title>{escape(brand)} · Product X · {escape(title)}</title>'
+        '<link rel="stylesheet" href="/assets/style.css">'
+        '<script src="/assets/storefront.js" defer></script></head>'
         f'<body class="storefront storefront-{slug}"><main>'
-        '<header class="store-masthead"><a href="/">← Back to Ghost//Shield</a>'
-        f'<p class="eyebrow">SIMULATED STOREFRONT</p><h1>{escape(title)}</h1></header>'
-        '<section class="store-product" aria-label="Product listing">'
-        '<div class="product-art" aria-hidden="true"><div class="product-device"><i></i></div></div>'
-        f'<div class="product-details"><h2>Product X</h2><dl>{entries}</dl>'
-        f'<h3>Listing copy</h3><pre>{escape(prose)}</pre></div></section>'
+        '<header class="shop-header">'
+        f'<a class="shop-brand" href="#product">{escape(brand)}</a>'
+        '<nav aria-label="Store sections"><a href="#product">Shop</a>'
+        '<a href="#specifications">Specifications</a><a href="#delivery">Delivery</a></nav>'
+        '<a class="shop-back" href="/#judge-guide">Back to lab ↗</a></header>'
+        f'<div class="shop-path"><span>{escape(title)}</span><span aria-hidden="true">/</span>'
+        f'<span>{escape(collection)}</span><span aria-hidden="true">/</span><span>Product X</span></div>'
+        '<section class="store-product" id="product" aria-label="Product listing">'
+        '<div class="product-art" aria-hidden="true"><div class="product-device-back"><i></i></div>'
+        '<div class="product-device"><i></i><span>X</span></div></div>'
+        f'<div class="product-details"><p class="shop-category">{escape(collection)}</p>'
+        f'<h1>Product X</h1><p class="shop-description">{escape(description)}</p>'
+        f'<dl id="specifications">{entries}</dl>'
+        '<form id="store-bag" class="shop-buy"><label for="shop-quantity">Quantity</label>'
+        '<select id="shop-quantity"><option>1</option><option>2</option><option>3</option></select>'
+        '<button type="submit">Add to demo bag</button>'
+        '<output id="shop-bag-status" role="status">Your bag is empty.</output></form></div></section>'
+        '<div class="shop-lower">'
+        f'<section id="delivery"><h2>{escape(fulfillment)}</h2><p>{escape(timing)}</p></section>'
+        f'<section class="shop-listing"><h2>From the seller</h2><pre>{escape(prose)}</pre></section>'
+        '</div><footer class="shop-footer"><p>Fictional storefront for the Ghost//Shield shopping lab.</p>'
+        '<a href="/#judge-guide">Return to the comparison ↗</a></footer>'
         '</main></body></html>'
     )
+
 
 
 def extract_sources(scenario: str, pages: dict[str, str]) -> dict:

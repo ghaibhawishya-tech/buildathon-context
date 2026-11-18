@@ -16,7 +16,11 @@ def check_lab(url):
             with page.expect_popup() as opened:
                 guide.get_by_role("link", name=store_name).click()
             listing = opened.value
-            expect(listing.get_by_role("heading", name=store_name)).to_be_visible()
+            expect(listing.locator(".shop-path")).to_contain_text(store_name)
+            expect(listing.get_by_role("heading", name="Product X")).to_be_visible()
+            listing.get_by_label("Quantity").select_option("2")
+            listing.get_by_role("button", name="Add to demo bag").click()
+            expect(listing.locator("#shop-bag-status")).to_have_text("Demo bag: 2 items.")
             expect(listing.locator("body")).to_have_class("storefront storefront-" + slug)
             listing.close()
         page.locator("#source-pages").get_by_text("Store C", exact=True).click()
@@ -26,7 +30,7 @@ def check_lab(url):
         with page.expect_popup() as opened:
             page.get_by_role("link", name="Preview storefront").click()
         storefront = opened.value
-        expect(storefront.get_by_role("heading", name="Store C")).to_be_visible()
+        expect(storefront.locator(".shop-path")).to_contain_text("Store C")
         expect(storefront.locator("dd").first).to_have_text("1999")
         storefront.close()
         page.get_by_role("button", name="Run experiment").click()

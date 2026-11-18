@@ -105,7 +105,7 @@ def storefront(slug: str, draft: str | None = None):
         raise HTTPException(422, "Store draft is too long.")
     return HTMLResponse(
         render_storefront(title, SHOPPING_PAGES[title] if draft is None else draft),
-        headers={"Content-Security-Policy": "default-src 'none'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+        headers={"Content-Security-Policy": "default-src 'none'; style-src 'self'; script-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'",
                  "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store"},
     )
 

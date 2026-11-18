@@ -220,7 +220,7 @@ def test_independent_storefront_urls(client, slug, title):
         "draft": "Price INR: 1999\n<b>Fictional copy</b>\nStorage GB: 128",
     })
     assert response.status_code == 200
-    assert f"<h1>{title}</h1>" in response.text
+    assert f"<span>{title}</span>" in response.text
     assert 'data-catalog-field="Price INR">1999</dd>' in response.text
     assert "&lt;b&gt;Fictional copy&lt;/b&gt;" in response.text
     assert client.get("/stores/unknown").status_code == 404
