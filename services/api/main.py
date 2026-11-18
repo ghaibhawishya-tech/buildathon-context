@@ -11,13 +11,13 @@ from typing import Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from .gateway import SCENARIOS, authorize, envelope, scoped_facts
 from .runner import run_agent
-from .sources import SOURCE_PAGES, extract_sources
+from .sources import SHOPPING_PAGES, SOURCE_PAGES, STORE_SLUGS, extract_sources, render_storefront
 
 WEB = Path(__file__).resolve().parents[2] / "apps" / "web"
 app = FastAPI(title="Ghost Shield Gateway")
@@ -94,6 +94,20 @@ def health():
 def scenarios():
     return {key: {"title": item.title, "task": item.task, "resource": item.resource}
             for key, item in SCENARIOS.items()}
+
+
+@app.get("/stores/{slug}", response_class=HTMLResponse, include_in_schema=False)
+def storefront(slug: str, draft: str | None = None):
+    title = STORE_SLUGS.get(slug)
+    if title is None:
+        raise HTTPException(404, "Store not found.")
+    if draft is not None and len(draft) > 3000:
+        raise HTTPException(422, "Store draft is too long.")
+    return HTMLResponse(
+        render_storefront(title, SHOPPING_PAGES[title] if draft is None else draft),
+        headers={"Content-Security-Policy": "default-src 'none'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'",
+                 "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "Cache-Control": "no-store"},
+    )
 
 
 @app.get("/source-pages/{scenario}")

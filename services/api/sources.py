@@ -1,18 +1,23 @@
 """Parse scoped data from editable simulated source documents."""
 import re
+from html import escape
+from html.parser import HTMLParser
 
 SHOPPING_PAGES = {
-    "Store A": "Price INR: 2999\nStorage GB: 128\n---\nStandard delivery.",
-    "Store B": "Price INR: 2499\nStorage GB: 128\n---\nPickup available.",
-    "Store C": "Price INR: 3299\nStorage GB: 256\n---\nExpress delivery available.",
+    "Store A": "Price INR: 2999\nStorage GB: 128\nStandard delivery.",
+    "Store B": "Price INR: 2499\nStorage GB: 128\nPickup available.",
+    "Store C": "Price INR: 3299\nStorage GB: 256\nExpress delivery available.",
 }
+STORE_SLUGS = {"a": "Store A", "b": "Store B", "c": "Store C"}
+SHOPPING_FIELDS = ("Price INR", "Storage GB")
+
 SOURCE_PAGES = {
     "shopping": SHOPPING_PAGES,
     "research": {
-        "Research article": "Sample size: 180\nDuration weeks: 12\nCompletion percent: 76\n---\nFictional study.",
+        "Research article": "Sample size: 180\nDuration weeks: 12\nCompletion percent: 76\nFictional study.",
     },
     "workspace": {
-        "Project update": "Owner: Mira\nPhase: Pilot\nBlocker: Pending accessibility review\n---\nFictional project memo.",
+        "Project update": "Owner: Mira\nPhase: Pilot\nBlocker: Pending accessibility review\nFictional project memo.",
     },
 }
 FIELD_LIMITS = {
@@ -29,14 +34,27 @@ CHOICES = {
 }
 
 
-def parse_fields(document: str, names: tuple[str, ...]) -> tuple[dict, bool]:
-    data, separator, note = document.partition("\n---\n")
+def split_document(document: str, names: tuple[str, ...]) -> tuple[list[tuple[str, str]], str]:
+    fields = []
+    prose = []
+    after_divider = False
+    for line in document.splitlines():
+        if line.strip() == "---":
+            after_divider = True
+            continue
+        key, colon, value = line.partition(":")
+        if colon and key.strip() in names and not after_divider:
+            fields.append((key.strip(), value.strip()))
+        else:
+            prose.append(line)
+    return fields, "\n".join(prose).strip()
+
+
+def validate_fields(fields: list[tuple[str, str]], names: tuple[str, ...]) -> dict:
     values = {}
-    for line in data.splitlines():
-        key, colon, raw = line.partition(":")
-        value = raw.strip()
-        if not colon or key not in names or key in values:
-            raise ValueError("Use each listed field exactly once before the --- separator.")
+    for key, value in fields:
+        if key not in names or key in values:
+            raise ValueError("List each product field once.")
         if key in FIELD_LIMITS:
             low, high = FIELD_LIMITS[key]
             if re.fullmatch(r"[0-9]{1,7}", value) is None or not low <= int(value) <= high:
@@ -49,7 +67,51 @@ def parse_fields(document: str, names: tuple[str, ...]) -> tuple[dict, bool]:
             raise ValueError(f"{key} must be one of: {choices}.")
     if values.keys() != set(names):
         raise ValueError("The source is missing a required field.")
-    return values, bool(separator and note.strip())
+    return values
+
+
+
+class StorefrontReader(HTMLParser):
+    """Collect text from the catalog cells. Other HTML is outside the schema."""
+
+    def __init__(self):
+        super().__init__()
+        self.fields = []
+        self.field = None
+        self.value = ""
+
+    def handle_starttag(self, tag, attrs):
+        key = dict(attrs).get("data-catalog-field")
+        if tag == "dd" and key in SHOPPING_FIELDS:
+            self.field = key
+            self.value = ""
+
+    def handle_data(self, data):
+        if self.field:
+            self.value += data
+
+    def handle_endtag(self, tag):
+        if tag == "dd" and self.field:
+            self.fields.append((self.field, self.value.strip()))
+            self.field = None
+
+
+def render_storefront(title: str, document: str) -> str:
+    fields, prose = split_document(document, SHOPPING_FIELDS)
+    entries = "".join(
+        f'<dt>{escape(key)}</dt><dd data-catalog-field="{escape(key)}">{escape(value)}</dd>'
+        for key, value in fields
+    )
+    return (
+        f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f'<title>{escape(title)} · Product X</title>'
+        '<link rel="stylesheet" href="/assets/style.css"></head>'
+        '<body class="storefront"><main><a href="/">← Back to Ghost//Shield</a>'
+        f'<p class="eyebrow">SIMULATED STOREFRONT</p><h1>{escape(title)}</h1>'
+        f'<h2>Product X</h2><dl>{entries}</dl><h2>Listing copy</h2><pre>{escape(prose)}</pre>'
+        '</main></body></html>'
+    )
 
 
 def extract_sources(scenario: str, pages: dict[str, str]) -> dict:
@@ -60,9 +122,18 @@ def extract_sources(scenario: str, pages: dict[str, str]) -> dict:
     facts = {}
     specifications = {}
     for title in templates:
-        names = tuple(line.split(":", 1)[0] for line in templates[title].partition("\n---\n")[0].splitlines())
+        names = tuple(
+            line.partition(":")[0] for line in templates[title].splitlines() if ":" in line
+        )
         try:
-            fields, has_note = parse_fields(pages[title], names)
+            fields, prose = split_document(pages[title], names)
+            if scenario == "shopping":
+                reader = StorefrontReader()
+                reader.feed(render_storefront(title, pages[title]))
+                reader.close()
+                fields = reader.fields
+            fields = validate_fields(fields, names)
+            has_note = bool(prose)
         except ValueError as exc:
             raise ValueError(f"{title}: {exc}") from exc
         if has_note:

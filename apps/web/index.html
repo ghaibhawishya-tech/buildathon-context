@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light">
   <title>Ghost//Shield — Agent Security Lab</title>
   <link rel="stylesheet" href="/assets/style.css">
   <script src="/assets/lab.js" defer></script>
@@ -44,17 +44,10 @@
 
             <fieldset class="source-editor">
               <legend>Simulated source pages</legend>
-              <p class="hint">Edit the fields above the divider to change the facts. Text below <code>---</code> stays in the audit.</p>
+              <p class="hint">Open any page and write fictional text in its editor. Keep each listed field on its own line so the gateway can find it.</p>
               <div id="source-pages"></div>
               <button type="button" id="reset-pages" class="secondary compact">Reset pages</button>
             </fieldset>
-
-            <label for="note">Untrusted source note</label>
-            <textarea id="note" aria-describedby="note-hint" rows="4" maxlength="2000" placeholder="Add a fictional note to the source…"></textarea>
-            <div class="note-foot">
-              <p class="hint" id="note-hint">Fictional data only. The note stays in the audit.</p>
-              <button type="button" class="text-button" id="reset-note" disabled>Clear note</button>
-            </div>
 
             <div class="control-grid">
               <div>
@@ -92,7 +85,7 @@
             <details id="boundary" hidden open>
               <summary>Inspect the content boundary</summary>
               <div class="evidence">
-                <div><h4>Original source material</h4><pre id="original"></pre><div id="original-pages"></div></div>
+                <div><h4>Original source material</h4><pre id="original" hidden></pre><div id="original-pages"></div></div>
                 <div><h4>Data returned by the gateway</h4><pre id="scoped"></pre></div>
               </div>
             </details>

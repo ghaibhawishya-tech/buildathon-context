@@ -178,7 +178,7 @@ def test_run_deadline_saves_decisions(client, monkeypatch):
 
 def test_catalog_price_edits_change_winner_and_page_notes_stay_in_audit(client):
     pages = client.get("/source-pages/shopping").json()
-    pages["Store C"] = "Price INR: 1999\nStorage GB: 256\n---\nFictional display copy."
+    pages["Store C"] = "Fictional display copy.\nPrice INR: 1999\nStorage GB: 256"
     result = client.post("/runs", json={"scenario": "shopping", "pages": pages})
     assert result.status_code == 201
     report = result.json()
@@ -211,3 +211,16 @@ def test_invalid_store_page_fails_before_creating_run(client, page):
 def test_other_scenarios_parse_edited_sources(client, scenario, page, title, expected):
     report = client.post("/runs", json={"scenario": scenario, "pages": {title: page}}).json()
     assert report["task_completed"] and report["answer"] == expected
+
+
+
+@pytest.mark.parametrize("slug,title", [("a", "Store A"), ("b", "Store B"), ("c", "Store C")])
+def test_independent_storefront_urls(client, slug, title):
+    response = client.get("/stores/" + slug, params={
+        "draft": "Price INR: 1999\n<b>Fictional copy</b>\nStorage GB: 128",
+    })
+    assert response.status_code == 200
+    assert f"<h1>{title}</h1>" in response.text
+    assert 'data-catalog-field="Price INR">1999</dd>' in response.text
+    assert "&lt;b&gt;Fictional copy&lt;/b&gt;" in response.text
+    assert client.get("/stores/unknown").status_code == 404

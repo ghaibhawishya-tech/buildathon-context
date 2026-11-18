@@ -12,8 +12,14 @@ def check_lab(url):
         page.goto(url)
         page.locator("#source-pages").get_by_text("Store C", exact=True).click()
         page.get_by_role("textbox", name="Store C source content").fill(
-            "Price INR: 1999\nStorage GB: 256\n---\nFictional listing copy."
+            "Fictional listing copy.\nPrice INR: 1999\nStorage GB: 256"
         )
+        with page.expect_popup() as opened:
+            page.get_by_role("link", name="Preview storefront").click()
+        storefront = opened.value
+        expect(storefront.get_by_role("heading", name="Store C")).to_be_visible()
+        expect(storefront.locator("dd").first).to_have_text("1999")
+        storefront.close()
         page.get_by_role("button", name="Run experiment").click()
         expect(page.locator("#answer")).to_contain_text('"price_inr": 1999')
         expect(page.locator("#scoped")).to_contain_text('"Store C": 1999')
@@ -26,17 +32,17 @@ def check_lab(url):
         expect(page.get_by_label("Rehearse an out-of-scope proposal")).to_have_value("send_message")
         expect(page.get_by_role("button", name="Run experiment")).to_be_focused()
         note = "<b>Fictional memo</b>"
-        editor = page.get_by_label("Untrusted source note")
-        editor.fill("Temporary note")
-        page.get_by_role("button", name="Clear note").click()
-        expect(editor).to_have_value("")
-        editor.fill(note)
+        page.locator("#source-pages").get_by_text("Project update", exact=True).click()
+        page.get_by_role("textbox", name="Project update source content").fill(
+            "Owner: Mira\n" + note + "\nPhase: Pilot\nBlocker: Pending accessibility review"
+        )
         page.get_by_label("Rehearse an out-of-scope proposal").select_option("send_message")
         page.get_by_role("button", name="Run experiment").click()
         expect(page.get_by_text("Legitimate task completed", exact=False)).to_be_visible()
         expect(page.get_by_text("DENY · send_message · not executed")).to_be_visible()
         expect(page.get_by_text("ALLOW · read_source · executed")).to_be_visible()
-        expect(page.locator("#original")).to_have_text(note)
+        page.locator("#original-pages").get_by_text("Project update", exact=True).click()
+        expect(page.locator("#original-pages")).to_contain_text(note)
         expect(page.locator("#scoped")).to_contain_text("derived_structured_data")
         expect(page.locator("#scoped")).not_to_contain_text(note)
         page.get_by_text("Full run evidence").click()
@@ -45,7 +51,7 @@ def check_lab(url):
         with page.expect_download() as download:
             page.get_by_role("button", name="Export JSON").click()
         snapshot = json.loads(download.value.path().read_text())
-        assert snapshot["source"]["content"] == note
+        assert note in snapshot["source"]["pages"]["Project update"]
         assert snapshot["events"][0]["side_effect"] is False
 
         page.get_by_role("button", name="Check authorization").click()

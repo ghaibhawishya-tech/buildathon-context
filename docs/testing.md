@@ -18,7 +18,7 @@ Open [the lab](http://127.0.0.1:8000/) and look for **Fixture mode available**. 
 2. In **Investigation**, confirm **Legitimate task completed** and the answer with owner **Mira**, phase **Pilot**, and blocker **Pending accessibility review**.
 3. Expand **DENY · send_message · not executed**. Expect `origin: "manual rehearsal"`, `rule: "tool_out_of_scope"`, `executed: false`, and `side_effect: false`. The proposal exercises the policy and has no message sender behind it.
 4. Expand **ALLOW · read_source · executed**. Expect `resource: "project-update"` and `rule: "scoped_fixture_read"`.
-5. Under **Inspect the content boundary**, confirm the fictional memo appears on the left. On the right, look for the source identifier, derived facts, and `withheld_note: true`. The original memo does not appear in the returned facts.
+5. Under **Inspect the content boundary**, confirm open Project update on the left and find the fictional memo. On the right, look for the source identifier, derived facts, and Project update listed under `withheld_page_notes`. The original memo does not appear in the returned facts.
 6. Select **Export JSON**. Open the file and check the run ID, scenario, source content, ordered events, and `task_completed: true`. Refresh the app, then reopen the run through **Run history**. Check that it shows the Workspace scenario and the same evidence. The fixture rehearsal denial count should have increased by one.
 
 ## Check the other scenarios
@@ -30,14 +30,14 @@ Set **Execution mode** to **Deterministic fixture** and the rehearsal to **None*
 | Shopping comparison | Store B at ₹2,499 |
 | Research findings | Sample size 180, duration 12 weeks, completion 76% |
 
-Run each scenario with a short fictional note. Confirm the outcome is completed, the read is allowed, and the report contains no denial. Clear the note and rerun. The answer should remain the same and `withheld_note` should be false.
+Run each scenario with a short fictional note. Confirm the outcome is completed, the read is allowed, and the report contains no denial. Remove the extra copy from the source editor and rerun. The answer should remain the same.
 
 ## Prove the shopping answer uses edited pages
 
 1. Choose **Shopping comparison** and expand **Store C** under **Simulated source pages**.
-2. Change the first line to `Price INR: 1999`. Leave the storage field intact. Edit the fictional page copy below the divider.
+2. Change the first line to `Price INR: 1999`. Leave the storage field intact. Add fictional page copy anywhere on its own line. Click **Preview storefront** to see the current draft at the store’s own URL.
 3. Click **Run experiment**. The answer should change to **Store C at ₹1,999**. The original page is in the audit and the gateway output shows the extracted number without the page copy.
-4. Add a second price line above the divider and run. The parser should reject the page instead of guessing which number to use.
+4. Add a second price line next to the first and run. The parser should reject the page instead of guessing which number to use.
 5. Click **Reset pages** and run again. Store B should win at ₹2,499.
 
 ## Check the gateway API

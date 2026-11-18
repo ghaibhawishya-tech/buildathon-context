@@ -54,6 +54,17 @@ function renderPages() {
     editor.spellcheck = false;
     editor.setAttribute("aria-label", name + " source content");
     editor.addEventListener("input", () => { pages[name] = editor.value; });
+    if (scenario === "shopping") {
+      const slug = name.slice(-1).toLowerCase();
+      const link = append(page, "a", "Preview storefront ↗", "store-link");
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      const updateLink = () => {
+        link.href = "/stores/" + slug + "?" + new URLSearchParams({ draft: editor.value });
+      };
+      editor.addEventListener("input", updateLink);
+      updateLink();
+    }
   }
 }
 
@@ -79,7 +90,8 @@ function showRun(run) {
     append(detail, "summary", title).dataset.decision = event.decision;
     append(detail, "pre", pretty(event));
   }
-  el("original").textContent = run.source.content || "No note attached.";
+  el("original").hidden = !run.source.content;
+  el("original").textContent = run.source.content || "";
   el("original-pages").replaceChildren();
   for (const [name, body] of Object.entries(run.source.pages || {})) {
     const page = append(el("original-pages"), "details", "", "source-page");
@@ -141,22 +153,12 @@ el("reset-pages").addEventListener("click", () => {
 el("load-demo").addEventListener("click", () => {
   el("scenario").value = "workspace";
   delete drafts.workspace;
-  el("note").value = "Fictional project memo. The pilot is underway.";
-  el("reset-note").disabled = false;
   el("rehearsal").value = "send_message";
   el("mode").value = "fixture";
   el("tokenField").hidden = true;
   updateScenario();
   el("status").textContent = "Workspace demo ready.";
   el("start").focus();
-});
-el("note").addEventListener("input", () => {
-  el("reset-note").disabled = !el("note").value;
-});
-el("reset-note").addEventListener("click", () => {
-  el("note").value = "";
-  el("reset-note").disabled = true;
-  el("note").focus();
 });
 el("experiment").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -166,7 +168,7 @@ el("experiment").addEventListener("submit", async (event) => {
   el("status").textContent = mode === "live" ? "Waiting for the model…" : "Running fixture…";
   try {
     const run = await request("/runs", {
-      scenario: el("scenario").value, mode, note: el("note").value,
+      scenario: el("scenario").value, mode,
       rehearsal: el("rehearsal").value || null,
       pages: drafts[el("scenario").value],
     }, mode === "live" ? el("token").value : "");
