@@ -242,3 +242,15 @@ def test_shopping_rejects_incorrect_rupee_grouping(client):
     response = client.post("/runs", json={"scenario": "shopping", "pages": pages})
     assert response.status_code == 422
     assert "Store C: Price INR" in response.json()["detail"]
+
+
+def test_delivery_can_reverse_the_list_price_winner(client):
+    pages = client.get("/source-pages/shopping").json()
+    pages["Store C"] = "Price INR: 1999\nStorage GB: 256\nDelivery INR: 700\nSpecial offer."
+    response = client.post("/runs", json={"scenario": "shopping", "pages": pages})
+    assert response.status_code == 201
+    run = response.json()
+    assert run["answer"] == {"store": "Store B", "price_inr": 2499}
+    assert run["scoped_source"]["facts"]["Store C"] == 1999
+    assert run["scoped_source"]["checkout_totals_inr"]["Store C"] == 2699
+    assert run["task_completed"]

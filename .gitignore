@@ -28,3 +28,6 @@ Thumbs.db
 # Local experiment database
 *.sqlite3
 *.sqlite3-*
+
+# Sites deployment checkout
+.sites-build/

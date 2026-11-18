@@ -122,6 +122,8 @@ See [RULES.md](RULES.md) for the full list.
 
 Agent developers need to give models access to useful data without giving external content the authority to expand tool permissions. Ghost//Shield lets you inspect the policy decision before a read occurs, then independently verifies the agent's answer.
 
+[Try the public judge demo](https://ghost-shield-context.ghaibhawishya.chatgpt.site) or follow the [launch walkthrough and voiceover script](docs/launch-demo.md).
+
 ### Run locally
 
 Use Python 3.11 or newer with SQLite 3.38 or newer.

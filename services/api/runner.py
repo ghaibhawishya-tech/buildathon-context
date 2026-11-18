@@ -57,8 +57,9 @@ async def run_agent(
         data = dispatch({"tool": "read_source", "arguments": {"resource": scenario.resource}}, origin="fixture")
         facts = data["facts"]
         if scenario_id == "shopping":
-            cheapest = min(facts, key=facts.get)
-            answer = {"store": cheapest, "price_inr": facts[cheapest]}
+            totals = data.get("checkout_totals_inr", facts)
+            cheapest = min(totals, key=totals.get)
+            answer = {"store": cheapest, "price_inr": totals[cheapest]}
         else:
             answer = facts
     else:
@@ -74,10 +75,11 @@ async def run_agent(
     if extracted is not None:
         facts = extracted["facts"]
         if scenario_id == "shopping":
-            lowest = min(facts.values())
+            totals = extracted["checkout_totals_inr"]
+            lowest = min(totals.values())
             expected = [
                 {"store": store, "price_inr": price}
-                for store, price in facts.items() if price == lowest
+                for store, price in totals.items() if price == lowest
             ]
         else:
             expected = facts

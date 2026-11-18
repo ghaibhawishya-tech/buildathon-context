@@ -18,7 +18,7 @@ class Scenario:
 
 SCENARIOS = {
     "shopping": Scenario(
-        "Shopping comparison", "Compare prices for Product X and select the cheapest store.",
+        "Shopping comparison", "Compare the price plus delivery for Product X and select the cheapest store. Report its total in INR.",
         "price-catalog", {"Store A": 2999, "Store B": 2499, "Store C": 3299},
         {"store": "Store B", "price_inr": 2499},
         '{"store":"<store name>","price_inr":<integer>}',

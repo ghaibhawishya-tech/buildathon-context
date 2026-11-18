@@ -4,12 +4,12 @@ from html import escape
 from html.parser import HTMLParser
 
 SHOPPING_PAGES = {
-    "Store A": "Price INR: 2999\nStorage GB: 128\nStandard delivery.",
-    "Store B": "Price INR: 2499\nStorage GB: 128\nPickup available.",
-    "Store C": "Price INR: 3299\nStorage GB: 256\nExpress delivery available.",
+    "Store A": "Price INR: 2999\nStorage GB: 128\nDelivery INR: 149\nStandard delivery.",
+    "Store B": "Price INR: 2499\nStorage GB: 128\nDelivery INR: 0\nPickup available.",
+    "Store C": "Price INR: 3299\nStorage GB: 256\nDelivery INR: 0\nExpress delivery available.",
 }
 STORE_SLUGS = {"a": "Store A", "b": "Store B", "c": "Store C"}
-SHOPPING_FIELDS = ("Price INR", "Storage GB")
+SHOPPING_FIELDS = ("Price INR", "Storage GB", "Delivery INR")
 STOREFRONT_DETAILS = {
     "a": ("Ochre Mobile", "Everyday essentials", "Standard delivery", "3–5 working days",
           "A straightforward phone listing with standard home delivery."),
@@ -30,6 +30,7 @@ SOURCE_PAGES = {
 }
 FIELD_LIMITS = {
     "Price INR": (1, 1_000_000),
+    "Delivery INR": (0, 50_000),
     "Storage GB": (1, 4096),
     "Sample size": (1, 1_000_000),
     "Duration weeks": (1, 520),
@@ -66,7 +67,7 @@ def validate_fields(fields: list[tuple[str, str]], names: tuple[str, ...]) -> di
             raise ValueError("List each product field once.")
         if key in FIELD_LIMITS:
             low, high = FIELD_LIMITS[key]
-            if key == "Price INR":
+            if key in ("Price INR", "Delivery INR"):
                 match = PRICE_FORMAT.fullmatch(value)
                 value = match[1].replace(",", "") if match else ""
             if re.fullmatch(r"[0-9]{1,7}", value) is None or not low <= int(value) <= high:
@@ -77,8 +78,8 @@ def validate_fields(fields: list[tuple[str, str]], names: tuple[str, ...]) -> di
         else:
             choices = ", ".join(sorted(CHOICES[key]))
             raise ValueError(f"{key} must be one of: {choices}.")
-    if values.keys() != set(names):
-        missing = ", ".join(name for name in names if name not in values)
+    missing = ", ".join(name for name in names if name not in values and name != "Delivery INR")
+    if missing:
         raise ValueError(f"Missing field: {missing}. Restore it in the source editor and run again.")
     return values
 
@@ -115,7 +116,7 @@ def render_storefront(title: str, document: str) -> str:
     brand, collection, fulfillment, timing, description = STOREFRONT_DETAILS[slug]
     entries = []
     for key, value in fields:
-        prefix = ' class="add-currency"' if key == "Price INR" and not value.startswith("₹") else ""
+        prefix = ' class="add-currency"' if key in ("Price INR", "Delivery INR") and not value.startswith("₹") else ""
         entries.append(f'<dt>{escape(key)}</dt><dd{prefix} data-catalog-field="{escape(key)}">{escape(value)}</dd>')
     product_facts = "".join(entries)
     return (
@@ -159,6 +160,7 @@ def extract_sources(scenario: str, pages: dict[str, str]) -> dict:
     withheld = []
     facts = {}
     specifications = {}
+    checkout_totals = {}
     for title in templates:
         names = tuple(
             line.partition(":")[0] for line in templates[title].splitlines() if ":" in line
@@ -178,7 +180,12 @@ def extract_sources(scenario: str, pages: dict[str, str]) -> dict:
             withheld.append(title)
         if scenario == "shopping":
             facts[title] = fields["Price INR"]
-            specifications[title] = {"storage_gb": fields["Storage GB"]}
+            delivery = fields.get("Delivery INR", 0)
+            specifications[title] = {"storage_gb": fields["Storage GB"], "delivery_inr": delivery}
+            checkout_totals[title] = fields["Price INR"] + delivery
         else:
             facts.update({key.lower().replace(" ", "_"): value for key, value in fields.items()})
-    return {"facts": facts, "specifications": specifications, "withheld_page_notes": withheld}
+    result = {"facts": facts, "specifications": specifications, "withheld_page_notes": withheld}
+    if scenario == "shopping":
+        result["checkout_totals_inr"] = checkout_totals
+    return result
