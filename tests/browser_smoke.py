@@ -22,6 +22,7 @@ def check_lab(url):
         storefront.close()
         page.get_by_role("button", name="Run experiment").click()
         expect(page.locator("#answer")).to_contain_text('"price_inr": 1999')
+        expect(page.locator("#answer-summary")).to_have_text("Store C · ₹1,999")
         expect(page.locator("#scoped")).to_contain_text('"Store C": 1999')
         expect(page.locator("#scoped")).not_to_contain_text("Fictional listing copy.")
         page.get_by_role("button", name="Reset pages").click()

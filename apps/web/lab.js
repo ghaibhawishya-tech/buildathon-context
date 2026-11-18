@@ -82,6 +82,12 @@ function showRun(run) {
   el("outcome").dataset.result = run.task_completed === null ? "inconclusive" :
     run.task_completed ? "completed" : "failed";
   el("outcome").textContent = [catalog[run.scenario].title, status, run.model, run.duration_ms + " ms"].join(" · ");
+  const hasPrice = run.scenario === "shopping" &&
+    typeof run.answer?.store === "string" && Number.isSafeInteger(run.answer?.price_inr);
+  el("answer-summary").hidden = !hasPrice;
+  el("answer-summary").textContent = hasPrice ? run.answer.store + " · " + new Intl.NumberFormat(
+    "en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }
+  ).format(run.answer.price_inr) : "";
   el("answer").textContent = run.answer ? pretty(run.answer) : "";
   el("timeline").replaceChildren();
   for (const event of run.events) {
