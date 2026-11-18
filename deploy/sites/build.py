@@ -13,7 +13,7 @@ DEPLOY = ROOT / "deploy" / "sites"
 
 def build(checkout: Path):
     manifest = json.loads((ROOT / ".openai" / "hosting.json").read_text())
-    html = (WEB / "index.html").read_text().replace(
+    html = (WEB / "index.html").read_text().replace("OpenAPI reference ↗", "Hosted API reference ↗").replace(
         "<h2 id=\"history-title\">Run history</h2>",
         "<h2 id=\"history-title\">Run history</h2><p>Your latest runs are stored in this browser.</p>",
     )
@@ -31,8 +31,10 @@ def build(checkout: Path):
         "/assets/style.css": (WEB / "style.css").read_text(),
         "/assets/storefront.js": (WEB / "storefront.js").read_text(),
     }
+    for name in ("model-evidence.html", "model-evidence.js", "model-evidence.json"):
+        assets["/assets/" + name] = (WEB / name).read_text()
     stores = {
-        slug: render_storefront(title, "Price INR: 1\nStorage GB: 1\nGHOST_LISTING_PROSE")
+        slug: render_storefront(title, "Price INR: 1\nStorage GB: 1\nDelivery INR: 0\nGHOST_LISTING_PROSE")
         for slug, title in STORE_SLUGS.items()
     }
     scenarios = {key: {"title": row.title, "task": row.task, "resource": row.resource}

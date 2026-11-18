@@ -1,5 +1,5 @@
 // The build prepends the shared storefronts, fixture templates and UI assets.
-const types = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html" };
+const types = { ".json": "application/json", ".js": "text/javascript", ".css": "text/css", ".html": "text/html" };
 const fields = Object.freeze({
   shopping: ["Price INR", "Storage GB", "Delivery INR"],
   research: ["Sample size", "Duration weeks", "Completion percent"],

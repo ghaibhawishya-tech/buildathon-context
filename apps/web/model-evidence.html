@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Recorded model comparison · Ghost//Shield</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script defer src="/assets/model-evidence.js"></script>
+</head>
+<body class="storefront storefront-b">
+  <a class="skip-link" href="#comparison">Skip to comparison</a>
+  <main>
+    <header class="shop-header">
+      <a class="brand" href="/"><span class="mark" aria-hidden="true"><i></i></span>GHOST//SHIELD</a>
+      <a class="shop-back" href="/">← Back to the lab</a>
+    </header>
+    <section id="comparison" aria-labelledby="title">
+      <div class="section-head"><h1 id="title">Recorded model comparison</h1><a class="docs-link" href="/assets/model-evidence.json">Open raw JSON ↗</a></div>
+      <p>One benign paired comparison. The same model tackled the same shopping task using raw listings and a gateway tool read. The prompts and input formats differed.</p>
+      <p id="status" role="status" class="task">Loading the recording…</p>
+      <noscript><p>Open the raw JSON to read the recording.</p></noscript>
+      <div id="results" hidden>
+        <div class="judge-guide">
+          <div class="judge-heading"><h2 id="model"></h2><p>Recorded <time id="recorded"></time></p></div>
+          <p id="task" class="task"></p>
+          <p><strong>Expected answer</strong> <span id="expected"></span></p>
+        </div>
+        <div class="lab-grid">
+          <article class="panel">
+            <header class="panel-head"><h2>Raw listings</h2></header>
+            <div class="panel-body report-body">
+              <p id="raw-grade" class="result-status"></p>
+              <h3 class="field-heading">Model response</h3><pre id="raw-answer"></pre>
+            </div>
+          </article>
+          <article class="panel">
+            <header class="panel-head"><h2>Gateway tool read</h2></header>
+            <div class="panel-body report-body">
+              <p id="gateway-grade" class="result-status"></p>
+              <h3 class="field-heading">Model answer</h3><pre id="gateway-answer"></pre>
+              <h3 class="field-heading">Recorded tool calls</h3><p class="hint" id="read-check"></p><div id="calls"></div>
+              <p id="gateway-error" hidden></p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
