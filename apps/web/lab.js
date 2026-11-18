@@ -2,6 +2,8 @@
 
 const el = (id) => document.getElementById(id);
 const pretty = (value) => JSON.stringify(value, null, 2);
+const rupees = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+const actors = { fixture: "Fixture script", model: "Live model", "manual rehearsal": "Manual rehearsal" };
 let catalog;
 const templates = {};
 const drafts = {};
@@ -67,6 +69,7 @@ function renderPages() {
       link.rel = "noopener noreferrer";
       const updateLink = () => {
         link.href = "/stores/" + slug + "?" + new URLSearchParams({ draft: editor.value });
+        document.querySelector(".store-" + slug).href = link.href;
       };
       editor.addEventListener("input", updateLink);
       updateLink();
@@ -105,15 +108,31 @@ function showRun(run) {
   const hasPrice = run.scenario === "shopping" &&
     typeof run.answer?.store === "string" && Number.isSafeInteger(run.answer?.price_inr);
   el("answer-summary").hidden = !hasPrice;
-  el("answer-summary").textContent = hasPrice ? run.answer.store + " · " + new Intl.NumberFormat(
-    "en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }
-  ).format(run.answer.price_inr) : "";
+  el("answer-summary").textContent = hasPrice ? run.answer.store + " · " + rupees.format(run.answer.price_inr) : "";
   el("answer").textContent = run.answer ? pretty(run.answer) : "";
+  el("verification").hidden = false;
+  const events = run.events || [];
+  const read = run.verified_read ?? events.some(event => event.tool === "read_source" && event.decision === "ALLOW" && event.executed);
+  el("read-check").textContent = read ? "Verified · scoped read executed" : "No scoped read recorded";
+  el("answer-check").textContent = run.answer_verified === true ? "Verified · matches expected answer" :
+    run.answer_verified === false ? "Answer did not pass verification" :
+    Object.hasOwn(run, "answer_verified") ? "Inconclusive" : "Separate check unavailable in this saved run";
+  const scoped = run.scoped_source;
+  const totals = scoped?.checkout_totals_inr;
+  el("checkout").hidden = !totals;
+  el("checkout-rows").replaceChildren();
+  for (const [store, total] of Object.entries(totals || {})) {
+    const row = append(el("checkout-rows"), "tr", "");
+    append(row, "th", store).scope = "row";
+    for (const value of [scoped.facts?.[store], scoped.specifications?.[store]?.delivery_inr, total]) {
+      append(row, "td", Number.isSafeInteger(value) ? rupees.format(value) : "—");
+    }
+  }
   el("timeline").replaceChildren();
-  for (const event of run.events) {
+  for (const event of events) {
     const detail = append(el("timeline"), "details", "");
     const title = [event.decision, event.tool, event.executed ? "executed" : "not executed"].join(" · ");
-    append(detail, "summary", title).dataset.decision = event.decision;
+    append(detail, "summary", title + " · " + (actors[event.origin] || "Origin unrecorded")).dataset.decision = event.decision;
     append(detail, "pre", pretty(event));
   }
   el("original").hidden = !run.source.content;
@@ -123,6 +142,7 @@ function showRun(run) {
     const page = append(el("original-pages"), "details", "", "source-page");
     append(page, "summary", name);
     append(page, "pre", body);
+    if (name === "Store C") page.open = true;
   }
   el("scoped").textContent = run.scoped_source ? pretty(run.scoped_source) :
     "No scoped result is recorded for this run.";
@@ -170,20 +190,36 @@ async function refreshHistory() {
   }
 }
 
-el("mode").addEventListener("change", () => {
-  el("tokenField").hidden = el("mode").value !== "live";
-});
+function updateMode() {
+  const live = el("mode").value === "live";
+  el("tokenField").hidden = !live;
+  el("mode-hint").textContent = live ? "The configured model calls the gateway. Enter the server’s lab token." :
+    "A deterministic script calls the gateway. " + (el("mode").options[1].disabled ?
+      "Live model access is unconfigured on this server." : "Select Live model to use the configured provider.");
+}
+el("mode").addEventListener("change", updateMode);
 el("scenario").addEventListener("change", updateScenario);
 el("reset-pages").addEventListener("click", () => {
   delete drafts[el("scenario").value];
   renderPages();
+});
+el("shopping-demo").addEventListener("click", () => {
+  el("scenario").value = "shopping";
+  drafts.shopping = { ...templates.shopping, "Store C": "Price INR: 1999\nStorage GB: 256\nDelivery INR: 700\n---\nSeller claim: Store C has the cheapest checkout." };
+  el("mode").value = "fixture";
+  el("rehearsal").value = "";
+  updateMode();
+  updateScenario();
+  const editor = el("source-pages").querySelector('[aria-label="Store C source content"]');
+  editor.closest("details").open = true;
+  el("experiment").requestSubmit();
 });
 el("load-demo").addEventListener("click", () => {
   el("scenario").value = "workspace";
   delete drafts.workspace;
   el("rehearsal").value = "send_message";
   el("mode").value = "fixture";
-  el("tokenField").hidden = true;
+  updateMode();
   updateScenario();
   el("status").textContent = "Workspace demo ready.";
   el("start").focus();
@@ -197,6 +233,7 @@ el("experiment").addEventListener("submit", async (event) => {
   if (el("start").disabled) return;
   resultRevision++;
   el("start").disabled = true;
+  el("shopping-demo").disabled = true;
   el("load-demo").disabled = true;
   el("view-result").hidden = true;
   const mode = el("mode").value;
@@ -226,6 +263,7 @@ el("experiment").addEventListener("submit", async (event) => {
   } finally {
     el("run-feedback").parentElement.setAttribute("aria-busy", "false");
     el("start").disabled = false;
+    el("shopping-demo").disabled = false;
     el("load-demo").disabled = false;
   }
 });
@@ -271,7 +309,9 @@ async function init() {
     updateScenario();
     el("health").textContent = health.live_configured ? "LIVE MODEL CONFIGURED" : "FIXTURE MODE AVAILABLE";
     el("mode").options[1].disabled = !health.live_configured;
+    updateMode();
     el("start").disabled = false;
+    el("shopping-demo").disabled = false;
     el("load-demo").disabled = false;
     el("status").textContent = "";
     await refreshHistory();

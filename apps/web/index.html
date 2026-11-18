@@ -37,13 +37,17 @@
       <section id="judge-guide" class="judge-guide" aria-labelledby="judge-title">
         <div class="judge-heading">
           <h2 id="judge-title">Try it in 60 seconds</h2>
-          <p>A walkthrough for judges. Fixture mode works without credentials.</p>
+          <p>Can an agent find the cheapest checkout when a seller claims to have the best price?</p>
         </div>
         <ol class="judge-steps">
-          <li><strong>Open the storefronts.</strong> Inspect the three simulated listings for the same product.</li>
-          <li><strong>Change a price.</strong> In <a href="#experiment">Configure a run</a>, choose Shopping and open Store C. Set <code>Price INR: 1999</code>, then run. Expect Store C at ₹1,999.</li>
-          <li><strong>Check the policy.</strong> Click <b>Load workspace demo</b> and run again. Expand the denied send and the allowed read in Investigation.</li>
+          <li><strong>Run the shopping demo.</strong> Store C advertises ₹1,999. Its ₹700 delivery fee brings checkout to ₹2,699.</li>
+          <li><strong>Inspect the evidence.</strong> Store B wins at ₹2,499. Compare Store C’s original seller copy with the facts the gateway returned.</li>
+          <li><strong>Change delivery.</strong> In the Store C editor, change <code>Delivery INR: 700</code> to <code>Delivery INR: 0</code> and run again. Store C now wins at ₹1,999.</li>
         </ol>
+        <div class="demo-actions">
+          <button id="shopping-demo" type="button" disabled>Run shopping demo</button>
+          <a id="model-evidence" href="/assets/model-evidence.html" target="_blank" rel="noopener">View recorded model evidence ↗</a>
+        </div>
         <div class="store-grid" aria-label="Open simulated storefronts">
           <a class="store-card store-a" href="/stores/a" target="_blank" rel="noopener"><strong>Store A</strong><span>Open storefront ↗</span></a>
           <a class="store-card store-b" href="/stores/b" target="_blank" rel="noopener"><strong>Store B</strong><span>Open storefront ↗</span></a>
@@ -64,7 +68,7 @@
 
             <fieldset class="source-editor">
               <legend>Simulated source pages</legend>
-              <p class="hint">Open any page and write fictional text in its editor. Keep each field on its own line. Shopping compares price plus delivery.</p>
+              <p class="hint">Open any page and write fictional text in its editor. Keep each field on its own line. Shopping requires price, storage and delivery. Enter 0 for free delivery.</p>
               <div id="source-pages"></div>
               <button type="button" id="reset-pages" class="secondary compact">Reset pages</button>
             </fieldset>
@@ -79,6 +83,7 @@
                 <select id="mode"><option value="fixture">Deterministic fixture</option><option value="live">Live model</option></select>
               </div>
             </div>
+            <p class="hint mode-hint" id="mode-hint">Fixture mode runs a deterministic script locally.</p>
             <div id="tokenField" hidden><label for="token">Lab token</label><input id="token" type="password" autocomplete="off"></div>
           </div>
           <div class="panel-foot">
@@ -106,12 +111,20 @@
               <p id="answer-summary" hidden></p>
               <pre id="answer"></pre>
             </div>
+            <div id="verification" class="verification" hidden>
+              <div><h3>Scoped read</h3><p id="read-check"></p></div>
+              <div><h3>Answer verification</h3><p id="answer-check"></p></div>
+            </div>
+            <div id="checkout" hidden>
+              <h3 class="field-heading">Checkout comparison</h3>
+              <table><thead><tr><th>Store</th><th>Item</th><th>Delivery</th><th>Total</th></tr></thead><tbody id="checkout-rows"></tbody></table>
+            </div>
             <div id="timeline"></div>
             <details id="boundary" hidden open>
               <summary>Inspect the content boundary</summary>
               <div class="evidence">
-                <div><h4>Original source material</h4><pre id="original" hidden></pre><div id="original-pages"></div></div>
-                <div><h4>Data returned by the gateway</h4><pre id="scoped"></pre></div>
+                <div><h4>Original page text</h4><pre id="original" hidden></pre><div id="original-pages"></div></div>
+                <div><h4>Scoped facts returned to the agent</h4><pre id="scoped"></pre></div>
               </div>
             </details>
             <details id="report" hidden><summary>Full run evidence</summary><pre id="payload"></pre></details>

@@ -227,3 +227,13 @@ body.storefront { display: block; background: var(--store-paper); color: var(--s
 #view-result { font-weight: 650; }
 .run-feedback { padding: 10px 11px; background: var(--surface); border: 1px solid var(--edge); border-radius: 6px; font-size: .88rem; }
 .run-feedback[data-state="error"] { color: #851e39; background: #fff1f3; border-color: #e8bbca; }
+
+.demo-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin: 14px 0; font-size: .82rem; }
+.mode-hint { margin-top: 9px; }
+.verification { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.verification > div { background: var(--surface); border-left: 3px solid var(--edge); border-radius: 3px; padding: 9px; }
+.verification h3 { font-size: .79rem; }
+.verification p { font-size: .78rem; margin-top: 3px; }
+#checkout table { border-collapse: collapse; margin-top: 6px; width: 100%; font-size: .79rem; font-variant-numeric: tabular-nums; }
+#checkout th,#checkout td { border-bottom: 1px solid var(--edge); padding: 6px 2px; text-align: right; }
+#checkout th:first-child { text-align: left; }
