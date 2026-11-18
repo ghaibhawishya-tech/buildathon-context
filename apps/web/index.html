@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Ghost//Shield — Agent Security Lab</title>
+<link rel="stylesheet" href="/assets/style.css">
+<script src="/assets/lab.js" defer></script>
+</head>
+<body>
+<header><div class="shell bar"><a class="brand" href="#">GHOST<span>//</span>SHIELD</a><nav><a href="#lab">Lab</a><a href="#history">History</a><a href="#api">API</a></nav></div></header>
+<main class="shell">
+<div class="hero"><p class="eyebrow">AGENT SECURITY LAB</p><h1>Don’t trust what<br>your agent reads.</h1><p>Test scoped tool access and verify how your agent uses untrusted sources.</p></div>
+<section id="lab">
+<div class="bar"><h2>Run an experiment</h2><span class="badge" id="health">Checking gateway</span></div>
+<div class="grid">
+<form class="panel" id="experiment">
+<label for="scenario">Scenario</label><select id="scenario" required></select><p id="task"></p>
+<label for="note">Untrusted source note</label><textarea id="note" rows="4" maxlength="2000" placeholder="Add a fictional note to the source"></textarea>
+<p class="hint">The note goes into the audit. The agent receives the fixture’s structured facts.</p>
+<label for="rehearsal">Rehearse an out-of-scope proposal</label>
+<select id="rehearsal"><option value="">None</option><option>read_private_note</option><option>send_message</option></select>
+<label for="mode">Execution mode</label><select id="mode"><option value="fixture">Deterministic fixture</option><option value="live">Live model</option></select>
+<div id="tokenField" hidden><label for="token">Lab token</label><input id="token" type="password" autocomplete="off"></div>
+<button id="start" disabled>Run experiment</button><p id="status" class="hint" role="status"></p>
+</form>
+<article class="panel">
+<div class="bar"><h3>Investigation</h3><button id="export" class="secondary" disabled>Export JSON</button></div>
+<p id="outcome">Run an experiment to see the tool decisions and verified outcome.</p>
+<pre id="answer"></pre><div id="timeline"></div>
+<details id="report" hidden><summary>Full run evidence</summary><pre id="payload"></pre></details>
+</article>
+</div>
+</section>
+<section id="history"><h2>Command center</h2><div class="grid" id="metrics"></div><div class="panel recent" id="recent">No experiments recorded yet.</div></section>
+<section id="api"><div class="bar"><h2>Gateway API</h2><a href="/docs">OpenAPI reference ↗</a></div>
+<form class="panel" id="playground"><p>Evaluate a proposal against the selected scenario’s policy. The playground does not execute tools.</p>
+<label for="proposal">Proposal JSON</label><textarea id="proposal" rows="5" required spellcheck="false"></textarea>
+<button class="secondary">Check authorization</button><pre id="decision" aria-live="polite"></pre></form>
+</section>
+</main><footer class="shell">Ghost//Shield · Context</footer>
+</body>
+</html>
