@@ -8,6 +8,7 @@ const drafts = {};
 let report;
 let exampleProposal = "";
 let proposalRevision = 0;
+let resultRevision = 0;
 
 function append(parent, tag, value, className) {
   const item = document.createElement(tag);
@@ -22,8 +23,13 @@ async function request(path, body, token) {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   };
   if (token) options.headers.Authorization = "Bearer " + token;
-  const response = await fetch(path, options);
-  const data = await response.json();
+  const response = await fetch(path, { ...options, signal: AbortSignal.timeout(path === "/runs" ? 55000 : 12000) });
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("The server returned an unreadable response.");
+  }
   if (!response.ok) throw Error(typeof data.detail === "string" ? data.detail : "Request rejected.");
   return data;
 }
@@ -73,9 +79,23 @@ function invalidateDecision() {
   el("decision").textContent = "";
 }
 
+function reveal(node) {
+  node.scrollIntoView({ block: "start" });
+  node.focus({ preventScroll: true });
+}
+
+function setRunFeedback(message, state) {
+  const feedback = el("run-feedback");
+  feedback.hidden = !message;
+  feedback.textContent = message;
+  feedback.dataset.state = state;
+  el("empty-report").hidden = Boolean(report || message);
+}
+
 function showRun(run) {
   report = run;
-  el("empty-report").hidden = true;
+  setRunFeedback(run.error || "", "error");
+  el("view-result").hidden = false;
   el("answer-block").hidden = !run.answer;
   const status = run.task_completed === null ? "Inconclusive" :
     run.task_completed ? "Legitimate task completed" : "Legitimate task failed";
@@ -137,10 +157,12 @@ async function refreshHistory() {
   for (const run of data.recent) {
     const label = [catalog[run.scenario].title, run.mode, new Date(run.created_at).toLocaleString()].join(" · ");
     append(el("recent"), "button", label, "secondary").addEventListener("click", async () => {
+      const revision = resultRevision;
       try {
-        showRun(await request("/runs/" + run.id));
-        el("outcome").scrollIntoView({ block: "center" });
-        el("outcome").focus({ preventScroll: true });
+        const savedRun = await request("/runs/" + run.id);
+        if (revision !== resultRevision || el("start").disabled) return;
+        showRun(savedRun);
+        reveal(el("outcome"));
       } catch (error) {
         el("history-status").textContent = "Could not open the saved run. " + error.message;
       }
@@ -166,12 +188,22 @@ el("load-demo").addEventListener("click", () => {
   el("status").textContent = "Workspace demo ready.";
   el("start").focus();
 });
+el("view-result").addEventListener("click", (event) => {
+  event.preventDefault();
+  reveal(el("run-feedback").hidden ? el("outcome") : el("run-feedback"));
+});
 el("experiment").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (el("start").disabled) return;
+  resultRevision++;
   el("start").disabled = true;
   el("load-demo").disabled = true;
+  el("view-result").hidden = true;
   const mode = el("mode").value;
-  el("status").textContent = mode === "live" ? "Waiting for the model…" : "Running fixture…";
+  const pending = mode === "live" ? "Waiting for the model…" : "Running experiment…";
+  el("status").textContent = pending;
+  setRunFeedback(pending + (report ? " The previous result is shown below." : ""), "pending");
+  el("run-feedback").parentElement.setAttribute("aria-busy", "true");
   try {
     const run = await request("/runs", {
       scenario: el("scenario").value, mode,
@@ -180,10 +212,19 @@ el("experiment").addEventListener("submit", async (event) => {
     }, mode === "live" ? el("token").value : "");
     showRun(run);
     el("status").textContent = run.error || "Run recorded.";
-    await refreshHistory();
+    reveal(el("outcome"));
+    void refreshHistory();
   } catch (error) {
-    el("status").textContent = error.message;
+    const reason = error.name === "TimeoutError"
+      ? "The server took too long to respond. Try again."
+      : error.message;
+    const previous = report ? " The previous result is still shown below." : "";
+    setRunFeedback("Run did not complete. " + reason + previous, "error");
+    el("status").textContent = "Run did not complete.";
+    el("view-result").hidden = false;
+    reveal(el("run-feedback"));
   } finally {
+    el("run-feedback").parentElement.setAttribute("aria-busy", "false");
     el("start").disabled = false;
     el("load-demo").disabled = false;
   }
@@ -232,6 +273,7 @@ async function init() {
     el("mode").options[1].disabled = !health.live_configured;
     el("start").disabled = false;
     el("load-demo").disabled = false;
+    el("status").textContent = "";
     await refreshHistory();
   } catch (error) {
     el("health").dataset.state = "error";

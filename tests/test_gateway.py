@@ -224,3 +224,21 @@ def test_independent_storefront_urls(client, slug, title):
     assert 'data-catalog-field="Price INR">1999</dd>' in response.text
     assert "&lt;b&gt;Fictional copy&lt;/b&gt;" in response.text
     assert client.get("/stores/unknown").status_code == 404
+
+
+
+@pytest.mark.parametrize("formatted", ["₹1,999", "1,999", "₹ 1999"])
+def test_shopping_accepts_common_rupee_formats(client, formatted):
+    pages = client.get("/source-pages/shopping").json()
+    pages["Store C"] = f"Price INR: {formatted}\nStorage GB: 256"
+    response = client.post("/runs", json={"scenario": "shopping", "pages": pages})
+    assert response.status_code == 201
+    assert response.json()["answer"] == {"store": "Store C", "price_inr": 1999}
+
+
+def test_shopping_rejects_incorrect_rupee_grouping(client):
+    pages = client.get("/source-pages/shopping").json()
+    pages["Store C"] = "Price INR: 1,99\nStorage GB: 256"
+    response = client.post("/runs", json={"scenario": "shopping", "pages": pages})
+    assert response.status_code == 422
+    assert "Store C: Price INR" in response.json()["detail"]

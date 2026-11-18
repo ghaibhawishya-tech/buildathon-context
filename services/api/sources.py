@@ -35,6 +35,7 @@ FIELD_LIMITS = {
     "Duration weeks": (1, 520),
     "Completion percent": (0, 100),
 }
+PRICE_FORMAT = re.compile(r"(?:₹\s*)?([0-9]{1,7}|[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,2}(?:,[0-9]{2})+,[0-9]{3})")
 CHOICES = {
     "Owner": {"Mira", "Alex", "Noor"},
     "Phase": {"Planning", "Pilot", "Release"},
@@ -65,6 +66,9 @@ def validate_fields(fields: list[tuple[str, str]], names: tuple[str, ...]) -> di
             raise ValueError("List each product field once.")
         if key in FIELD_LIMITS:
             low, high = FIELD_LIMITS[key]
+            if key == "Price INR":
+                match = PRICE_FORMAT.fullmatch(value)
+                value = match[1].replace(",", "") if match else ""
             if re.fullmatch(r"[0-9]{1,7}", value) is None or not low <= int(value) <= high:
                 raise ValueError(f"{key} must be an integer from {low} to {high}.")
             values[key] = int(value)
@@ -74,7 +78,8 @@ def validate_fields(fields: list[tuple[str, str]], names: tuple[str, ...]) -> di
             choices = ", ".join(sorted(CHOICES[key]))
             raise ValueError(f"{key} must be one of: {choices}.")
     if values.keys() != set(names):
-        raise ValueError("The source is missing a required field.")
+        missing = ", ".join(name for name in names if name not in values)
+        raise ValueError(f"Missing field: {missing}. Restore it in the source editor and run again.")
     return values
 
 
@@ -108,10 +113,11 @@ def render_storefront(title: str, document: str) -> str:
     fields, prose = split_document(document, SHOPPING_FIELDS)
     slug = title[-1].lower()
     brand, collection, fulfillment, timing, description = STOREFRONT_DETAILS[slug]
-    entries = "".join(
-        f'<dt>{escape(key)}</dt><dd data-catalog-field="{escape(key)}">{escape(value)}</dd>'
-        for key, value in fields
-    )
+    entries = []
+    for key, value in fields:
+        prefix = ' class="add-currency"' if key == "Price INR" and not value.startswith("₹") else ""
+        entries.append(f'<dt>{escape(key)}</dt><dd{prefix} data-catalog-field="{escape(key)}">{escape(value)}</dd>')
+    product_facts = "".join(entries)
     return (
         f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -131,7 +137,7 @@ def render_storefront(title: str, document: str) -> str:
         '<div class="product-device"><i></i><span>X</span></div></div>'
         f'<div class="product-details"><p class="shop-category">{escape(collection)}</p>'
         f'<h1>Product X</h1><p class="shop-description">{escape(description)}</p>'
-        f'<dl id="specifications">{entries}</dl>'
+        f'<dl id="specifications">{product_facts}</dl>'
         '<form id="store-bag" class="shop-buy"><label for="shop-quantity">Quantity</label>'
         '<select id="shop-quantity"><option>1</option><option>2</option><option>3</option></select>'
         '<button type="submit">Add to demo bag</button>'

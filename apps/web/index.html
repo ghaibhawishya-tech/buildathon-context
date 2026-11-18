@@ -82,17 +82,19 @@
             <div id="tokenField" hidden><label for="token">Lab token</label><input id="token" type="password" autocomplete="off"></div>
           </div>
           <div class="panel-foot">
-            <p id="status" class="hint" role="status"></p>
+            <p id="status" class="hint" role="status">Loading scenarios…</p>
+            <a id="view-result" class="hint" href="#investigation" hidden>View result ↗</a>
             <button id="start" disabled><span aria-hidden="true">▷</span> Run experiment</button>
           </div>
         </form>
 
-        <article class="panel" aria-labelledby="result-title">
+        <article class="panel" id="investigation" aria-labelledby="result-title">
           <div class="panel-head">
             <h2 id="result-title">Investigation</h2>
             <button id="export" type="button" class="secondary compact" disabled>Export JSON <span aria-hidden="true">↓</span></button>
           </div>
-          <div class="panel-body report-body">
+          <div class="panel-body report-body" aria-busy="false">
+            <p id="run-feedback" class="run-feedback" tabindex="-1" role="status" hidden></p>
             <div id="empty-report" class="empty-report">
               <div class="empty-illustration" aria-hidden="true"><span></span><i></i></div>
               <h3>No run selected</h3>
