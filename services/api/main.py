@@ -43,13 +43,25 @@ class PolicyInput(BaseModel):
 
 @contextmanager
 def database():
-    conn = sqlite3.connect(os.getenv("GHOST_DB", "ghost-shield.sqlite3"))
+    conn = sqlite3.connect(os.getenv("GHOST_DB", "ghost-shield.sqlite3"), timeout=2)
     try:
         with conn:
             conn.execute("CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, report TEXT NOT NULL)")
             yield conn
     finally:
         conn.close()
+
+
+def save_run(report: dict) -> None:
+    payload = json.dumps(report, ensure_ascii=False, allow_nan=False)
+    payload.encode("utf-8")
+    with database() as conn:
+        conn.execute("INSERT INTO runs VALUES (?, ?)", (report["id"], payload))
+
+
+@app.exception_handler(sqlite3.Error)
+async def database_failure(request: Request, error: sqlite3.Error):
+    return JSONResponse({"detail": "The run store is unavailable. Check the server database."}, status_code=503)
 
 
 @app.middleware("http")
@@ -105,16 +117,12 @@ async def create_run(body: RunInput, authorization: str = Header(default="")):
         if live_slots.locked():
             raise HTTPException(429, "A live run is already in progress.")
         async with live_slots:
-            try:
-                report = await asyncio.wait_for(run_agent(body.scenario, body.note, body.mode, body.rehearsal), timeout=45)
-            except TimeoutError:
-                raise HTTPException(504, "The model exceeded the run deadline.") from None
+            report = await run_agent(body.scenario, body.note, body.mode, body.rehearsal)
     else:
         report = await run_agent(body.scenario, body.note, body.mode, body.rehearsal)
 
     report.update(id=str(uuid4()), created_at=datetime.now(timezone.utc).isoformat())
-    with database() as conn:
-        conn.execute("INSERT INTO runs VALUES (?, ?)", (report["id"], json.dumps(report)))
+    await asyncio.to_thread(save_run, report)
     return report
 
 
@@ -134,18 +142,37 @@ def get_events(run_id: str):
 
 @app.get("/metrics")
 def metrics():
+    groups = {
+        mode: dict(recorded=0, evaluated=0, completed=0, blocked=0, model_denials=0,
+                   rehearsal_denials=0, average_duration_ms=None)
+        for mode in ("fixture", "live")
+    }
     with database() as conn:
-        records = [json.loads(row[0]) for row in conn.execute("SELECT report FROM runs ORDER BY rowid DESC")]
-    groups = {}
-    for mode in ("fixture", "live"):
-        runs = [run for run in records if run["mode"] == mode]
-        groups[mode] = {
-            "recorded": len(runs),
-            "evaluated": sum(run["task_completed"] is not None for run in runs),
-            "completed": sum(run["task_completed"] is True for run in runs),
-            "blocked": sum(event["decision"] == "DENY" for run in runs for event in run["events"]),
-            "average_duration_ms": round(sum(run["duration_ms"] for run in runs) / len(runs), 2) if runs else None,
-        }
-    recent = [{key: run[key] for key in ("id", "scenario", "mode", "task_completed", "created_at")}
-              for run in records[:12]]
+        conn.row_factory = sqlite3.Row
+        for row in conn.execute("""
+            SELECT report ->> '$.mode' AS mode, COUNT(*) AS recorded,
+                   COUNT(report ->> '$.task_completed') AS evaluated,
+                   COALESCE(SUM(report ->> '$.task_completed'), 0) AS completed,
+                   ROUND(AVG(report ->> '$.duration_ms'), 2) AS average_duration_ms
+            FROM runs GROUP BY mode
+        """):
+            values = dict(row)
+            groups[values.pop("mode")].update(values)
+        for row in conn.execute("""
+            SELECT report ->> '$.mode' AS mode, value ->> '$.origin' AS origin, COUNT(*) AS denied
+            FROM runs, json_each(runs.report, '$.events')
+            WHERE value ->> '$.decision' = 'DENY' GROUP BY mode, origin
+        """):
+            stats = groups[row["mode"]]
+            stats["blocked"] += row["denied"]
+            if row["origin"] == "model":
+                stats["model_denials"] += row["denied"]
+            elif row["origin"] == "manual rehearsal":
+                stats["rehearsal_denials"] += row["denied"]
+        recent = [json.loads(row[0]) for row in conn.execute("""
+            SELECT json_object('id', id, 'scenario', report -> '$.scenario',
+                'mode', report -> '$.mode', 'task_completed', report -> '$.task_completed',
+                'created_at', report -> '$.created_at')
+            FROM runs ORDER BY rowid DESC LIMIT 12
+        """)]
     return {"by_mode": groups, "recent": recent}

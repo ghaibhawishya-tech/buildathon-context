@@ -111,3 +111,66 @@ def test_model_protocol_and_independent_scoring(client, monkeypatch, store, pric
     assert len(requests) == 2
     assert response.json()["events"][0]["origin"] == "model"
     assert response.json()["task_completed"] is completed
+
+
+@pytest.mark.parametrize("failure", ["timeout", "nonfinite", "malformed"])
+def test_provider_failure_keeps_partial_audit(client, monkeypatch, failure):
+    import json
+    import httpx
+    from services.api import runner
+
+    monkeypatch.setenv("GHOST_MODEL_KEY", "fixture-test-key")
+    monkeypatch.setenv("GHOST_LAB_TOKEN", "fixture-test-token")
+    real_client = httpx.AsyncClient
+    calls = 0
+
+    def provider(request):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            function = {"name": "read_source", "arguments": json.dumps({"resource": "project-update"})}
+            message = {"content": None, "tool_calls": [{"id": "read-1", "type": "function", "function": function}]}
+        elif failure == "timeout":
+            raise httpx.ReadTimeout("Fixture timeout", request=request)
+        elif failure == "nonfinite":
+            message = {"content": '{"value": 1e999}'}
+        else:
+            message = None
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    monkeypatch.setattr(runner.httpx, "AsyncClient",
+                        lambda **kwargs: real_client(transport=httpx.MockTransport(provider), **kwargs))
+    response = client.post("/runs", headers={"Authorization": "Bearer fixture-test-token"},
+                           json={"scenario": "workspace", "mode": "live", "rehearsal": "send_message"})
+    assert response.status_code == 201
+    report = response.json()
+    assert report["task_completed"] is None and report["error"]
+    assert [event["decision"] for event in report["events"]] == ["DENY", "ALLOW"]
+    assert report["scoped_source"]["source_id"] == "project-update"
+    assert client.get(f"/runs/{report['id']}").json() == report
+    live = client.get("/metrics").json()["by_mode"]["live"]
+    assert live["recorded"] == live["rehearsal_denials"] == 1
+    assert live["evaluated"] == live["model_denials"] == 0
+
+
+def test_run_deadline_saves_decisions(client, monkeypatch):
+    import asyncio
+    from services.api import runner
+
+    monkeypatch.setenv("GHOST_MODEL_KEY", "fixture-test-key")
+    monkeypatch.setenv("GHOST_LAB_TOKEN", "fixture-test-token")
+    monkeypatch.setattr(runner, "RUN_TIMEOUT_SECONDS", 0.02)
+
+    async def stalled_provider(scenario, model, dispatch):
+        dispatch({"tool": "read_source", "arguments": {"resource": scenario.resource}})
+        await asyncio.Future()
+
+    monkeypatch.setattr(runner, "live_answer", stalled_provider)
+    response = client.post("/runs", headers={"Authorization": "Bearer fixture-test-token"},
+                           json={"scenario": "workspace", "mode": "live"})
+    assert response.status_code == 201
+    report = response.json()
+    assert report["task_completed"] is None
+    assert report["error"] == "The model exceeded its response deadline."
+    assert report["events"][0]["executed"]
+    assert client.get(f"/runs/{report['id']}/events").json() == report["events"]

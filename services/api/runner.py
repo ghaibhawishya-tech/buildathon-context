@@ -1,6 +1,8 @@
 """Read-only runner. Authorization precedes every tool dispatch."""
+import asyncio
 import json
 import os
+from datetime import datetime, timezone
 from time import perf_counter
 
 import httpx
@@ -8,6 +10,11 @@ import httpx
 from .gateway import SCENARIOS, authorize, envelope, scoped_facts
 
 MAX_STEPS = 3
+RUN_TIMEOUT_SECONDS = 45
+
+
+def reject_nonfinite(_: str):
+    raise ValueError("Non-finite JSON number")
 
 
 async def run_agent(scenario_id: str, note: str, mode: str, rehearsal: str | None = None) -> dict:
@@ -15,23 +22,29 @@ async def run_agent(scenario_id: str, note: str, mode: str, rehearsal: str | Non
     source = envelope(scenario, note)
     timeline = []
     start = perf_counter()
+    read_result = None
     answer = None
     error = None
     model = os.getenv("GHOST_MODEL", "gpt-4.1-mini") if mode == "live" else "deterministic fixture"
 
     def dispatch(request: dict, origin: str = "model") -> dict:
+        nonlocal read_result
         decision = authorize(scenario_id, request)
         allowed = decision["decision"] == "ALLOW"
         arguments = request.get("arguments")
         tool = request.get("tool")
         resource = arguments.get("resource") if isinstance(arguments, dict) else None
+        result = scoped_facts(scenario, source) if allowed else decision
+        if allowed:
+            read_result = result
         timeline.append({
             "tool": tool if tool in ("read_source", "read_private_note", "send_message") else "unknown tool",
             "origin": origin,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "resource": resource if resource == scenario.resource else None,
             **decision, "executed": allowed, "side_effect": False,
         })
-        return scoped_facts(scenario, source) if allowed else decision
+        return result
 
     if rehearsal:
         dispatch({"tool": rehearsal, "arguments": {}}, origin="manual rehearsal")
@@ -45,7 +58,10 @@ async def run_agent(scenario_id: str, note: str, mode: str, rehearsal: str | Non
             answer = facts
     else:
         try:
-            answer = await live_answer(scenario, model, dispatch)
+            async with asyncio.timeout(RUN_TIMEOUT_SECONDS):
+                answer = await live_answer(scenario, model, dispatch)
+        except (TimeoutError, httpx.TimeoutException):
+            error = "The model exceeded its response deadline."
         except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError):
             error = "Model request failed or returned a response in an unsupported format."
     verified_read = any(event["executed"] for event in timeline)
@@ -56,7 +72,8 @@ async def run_agent(scenario_id: str, note: str, mode: str, rehearsal: str | Non
     )
     return {
         "scenario": scenario_id, "task": scenario.task, "mode": mode,
-        "model": model, "source": source, "events": timeline, "answer": answer,
+        "model": model, "source": source, "scoped_source": read_result,
+        "events": timeline, "answer": answer,
         "task_completed": completed if not error else None,
         "unauthorized_effects": sum(event["side_effect"] for event in timeline),
         "duration_ms": round((perf_counter() - start) * 1000, 2), "error": error,
@@ -85,9 +102,13 @@ async def live_answer(scenario, model: str, dispatch):
             )
             response.raise_for_status()
             message = response.json()["choices"][0]["message"]
+            if not isinstance(message, dict):
+                raise ValueError("Invalid model message")
             calls = message.get("tool_calls")
             if not calls:
-                return json.loads(message["content"])
+                answer = json.loads(message["content"], parse_constant=reject_nonfinite)
+                json.dumps(answer, ensure_ascii=False, allow_nan=False).encode("utf-8")
+                return answer
             if not isinstance(calls, list) or len(calls) > 3:
                 raise ValueError("Invalid tool-call count")
             messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": calls})

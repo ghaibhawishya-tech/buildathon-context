@@ -124,6 +124,8 @@ Agent developers need to give models access to useful data without giving extern
 
 ### Run locally
 
+Use Python 3.11 or newer with SQLite 3.38 or newer.
+
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
