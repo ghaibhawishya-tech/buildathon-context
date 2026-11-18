@@ -77,11 +77,11 @@ function collect(pages, scenario) {
         values[key] = input;
       }
     }
-    const missing = expected.filter((key) => key !== "Delivery INR" && !Object.hasOwn(values, key));
+    const missing = expected.filter((key) => !Object.hasOwn(values, key));
     if (missing.length) throw Error(title + ": Missing field: " + missing.join(", ") + ".");
     if (prose) output.withheld_page_notes.push(title);
     if (scenario === "shopping") {
-      const delivery = values["Delivery INR"] ?? 0;
+      const delivery = values["Delivery INR"];
       output.facts[title] = values["Price INR"];
       output.specifications[title] = { storage_gb: values["Storage GB"], delivery_inr: delivery };
       output.checkout_totals_inr[title] = values["Price INR"] + delivery;
@@ -103,6 +103,26 @@ function authorize(scenario, proposal) {
   return { decision: "ALLOW", rule: "scoped_fixture_read" };
 }
 
+function fixtureAnswer(scenario, data) {
+  if (scenario !== "shopping") return { ...data.facts };
+  const [store, price] = Object.entries(data.checkout_totals_inr).sort((a, b) => a[1] - b[1])[0];
+  return { store, price_inr: price };
+}
+
+function verifyAnswer(scenario, answer, data) {
+  if (!data || !object(answer)) return false;
+  if (scenario === "shopping") {
+    const totals = data.checkout_totals_inr;
+    return Object.keys(answer).length === 2 && Object.hasOwn(answer, "store") &&
+      Object.hasOwn(answer, "price_inr") && typeof answer.store === "string" &&
+      Object.hasOwn(totals, answer.store) && totals[answer.store] === answer.price_inr &&
+      answer.price_inr === Math.min(...Object.values(totals));
+  }
+  const keys = fields[scenario].map(key => key.toLowerCase().replaceAll(" ", "_"));
+  return Object.keys(answer).length === keys.length && keys.every(key =>
+    Object.hasOwn(answer, key) && Object.hasOwn(data.facts, key) && answer[key] === data.facts[key]);
+}
+
 function report(body) {
   const start = performance.now();
   const { scenario, mode = "fixture", rehearsal, pages = PAGES[scenario] } = body;
@@ -122,19 +142,16 @@ function report(body) {
   if (rehearsal) check({ tool: rehearsal, arguments: {} }, "manual rehearsal");
   const allowed = check({ tool: "read_source", arguments: { resource } }, "fixture");
   const data = allowed ? collect(pages, scenario) : null;
-  let answer = data?.facts ?? null;
-  let completed = allowed;
-  if (scenario === "shopping" && data) {
-    const totals = Object.entries(data.checkout_totals_inr);
-    const [store, price] = [...totals].sort((a, b) => a[1] - b[1])[0];
-    answer = { store, price_inr: price };
-    completed = totals.some(([name, total]) => name === store && total === price) &&
-      totals.every(([, total]) => total >= price);
-  }
+  const answer = data && fixtureAnswer(scenario, data);
+  const verified_read = events.some(event => event.tool === "read_source" && event.resource === resource &&
+    event.decision === "ALLOW" && event.executed);
+  const answer_verified = verifyAnswer(scenario, answer, data);
   return { id: crypto.randomUUID(), created_at: new Date().toISOString(), scenario, task, mode,
-    model: "deterministic fixture", source, events, answer, task_completed: completed,
+    model: "deterministic fixture", source, events, answer, verified_read, answer_verified,
+    task_completed: verified_read && answer_verified,
     scoped_source: data && { source_id: resource, trust_level: "derived_structured_data", ...data },
-    unauthorized_effects: 0, duration_ms: Math.round((performance.now() - start) * 100) / 100, error: null };
+    side_effect_scope: "read_only_fixture", unauthorized_effects: events.filter(event => event.side_effect).length,
+    duration_ms: Math.round((performance.now() - start) * 100) / 100, error: null };
 }
 
 export default {
