@@ -32,6 +32,14 @@ Set **Execution mode** to **Deterministic fixture** and the rehearsal to **None*
 
 Run each scenario with a short fictional note. Confirm the outcome is completed, the read is allowed, and the report contains no denial. Clear the note and rerun. The answer should remain the same and `withheld_note` should be false.
 
+## Prove the shopping answer uses edited pages
+
+1. Choose **Shopping comparison** and expand **Store C** under **Simulated source pages**.
+2. Change the first line to `Price INR: 1999`. Leave the storage field intact. Edit the fictional page copy below the divider.
+3. Click **Run experiment**. The answer should change to **Store C at ₹1,999**. The original page is in the audit and the gateway output shows the extracted number without the page copy.
+4. Add a second price line above the divider and run. The parser should reject the page instead of guessing which number to use.
+5. Click **Reset pages** and run again. Store B should win at ₹2,499.
+
 ## Check the gateway API
 
 1. Choose **Workspace review**. In **Gateway API**, select **Use example proposal** if needed. **Check authorization** should return `ALLOW` with rule `scoped_fixture_read` and `executed: false`. The playground only makes a decision.

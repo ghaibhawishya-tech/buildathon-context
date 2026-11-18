@@ -42,6 +42,13 @@
             <select id="scenario" required></select>
             <p id="task" class="task"></p>
 
+            <fieldset class="source-editor">
+              <legend>Simulated source pages</legend>
+              <p class="hint">Edit the fields above the divider to change the facts. Text below <code>---</code> stays in the audit.</p>
+              <div id="source-pages"></div>
+              <button type="button" id="reset-pages" class="secondary compact">Reset pages</button>
+            </fieldset>
+
             <label for="note">Untrusted source note</label>
             <textarea id="note" aria-describedby="note-hint" rows="4" maxlength="2000" placeholder="Add a fictional note to the source…"></textarea>
             <div class="note-foot">
@@ -85,7 +92,7 @@
             <details id="boundary" hidden open>
               <summary>Inspect the content boundary</summary>
               <div class="evidence">
-                <div><h4>Untrusted source note</h4><pre id="original"></pre></div>
+                <div><h4>Original source material</h4><pre id="original"></pre><div id="original-pages"></div></div>
                 <div><h4>Data returned by the gateway</h4><pre id="scoped"></pre></div>
               </div>
             </details>

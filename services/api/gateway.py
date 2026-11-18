@@ -72,9 +72,10 @@ def envelope(scenario: Scenario, note: str) -> dict:
     }
 
 
-def scoped_facts(scenario: Scenario, record: dict) -> dict:
+def scoped_facts(scenario: Scenario, record: dict, extracted: dict | None = None) -> dict:
     return {
         "source_id": record["source_id"], "trust_level": "derived_structured_data",
         "facts": dict(scenario.facts),
         "withheld_note": bool(record["content"]),
+        **(extracted or {}),
     }

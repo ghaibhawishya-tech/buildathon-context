@@ -3,6 +3,8 @@
 const el = (id) => document.getElementById(id);
 const pretty = (value) => JSON.stringify(value, null, 2);
 let catalog;
+const templates = {};
+const drafts = {};
 let report;
 let exampleProposal = "";
 let proposalRevision = 0;
@@ -34,6 +36,25 @@ function updateScenario() {
   exampleProposal = pretty({ tool: "read_source", arguments: { resource: scenario.resource } });
   if (!custom) el("proposal").value = exampleProposal;
   invalidateDecision();
+  renderPages();
+}
+
+function renderPages() {
+  const scenario = el("scenario").value;
+  const pages = drafts[scenario] ??= { ...templates[scenario] };
+  const container = el("source-pages");
+  container.replaceChildren();
+  for (const [name, content] of Object.entries(pages)) {
+    const page = append(container, "details", "", "source-page");
+    append(page, "summary", name);
+    const editor = append(page, "textarea", "");
+    editor.value = content;
+    editor.rows = 5;
+    editor.maxLength = 3000;
+    editor.spellcheck = false;
+    editor.setAttribute("aria-label", name + " source content");
+    editor.addEventListener("input", () => { pages[name] = editor.value; });
+  }
 }
 
 function invalidateDecision() {
@@ -59,6 +80,12 @@ function showRun(run) {
     append(detail, "pre", pretty(event));
   }
   el("original").textContent = run.source.content || "No note attached.";
+  el("original-pages").replaceChildren();
+  for (const [name, body] of Object.entries(run.source.pages || {})) {
+    const page = append(el("original-pages"), "details", "", "source-page");
+    append(page, "summary", name);
+    append(page, "pre", body);
+  }
   el("scoped").textContent = run.scoped_source ? pretty(run.scoped_source) :
     "No scoped result is recorded for this run.";
   el("boundary").hidden = false;
@@ -107,8 +134,13 @@ el("mode").addEventListener("change", () => {
   el("tokenField").hidden = el("mode").value !== "live";
 });
 el("scenario").addEventListener("change", updateScenario);
+el("reset-pages").addEventListener("click", () => {
+  delete drafts[el("scenario").value];
+  renderPages();
+});
 el("load-demo").addEventListener("click", () => {
   el("scenario").value = "workspace";
+  delete drafts.workspace;
   el("note").value = "Fictional project memo. The pilot is underway.";
   el("reset-note").disabled = false;
   el("rehearsal").value = "send_message";
@@ -136,6 +168,7 @@ el("experiment").addEventListener("submit", async (event) => {
     const run = await request("/runs", {
       scenario: el("scenario").value, mode, note: el("note").value,
       rehearsal: el("rehearsal").value || null,
+      pages: drafts[el("scenario").value],
     }, mode === "live" ? el("token").value : "");
     showRun(run);
     el("status").textContent = run.error || "Run recorded.";
@@ -180,6 +213,9 @@ async function init() {
   try {
     const [scenarios, health] = await Promise.all([request("/scenarios"), request("/health")]);
     catalog = scenarios;
+    await Promise.all(Object.keys(catalog).map(async (id) => {
+      templates[id] = await request("/source-pages/" + id);
+    }));
     for (const [id, scenario] of Object.entries(catalog)) {
       el("scenario").add(new Option(scenario.title, id));
     }

@@ -174,3 +174,40 @@ def test_run_deadline_saves_decisions(client, monkeypatch):
     assert report["error"] == "The model exceeded its response deadline."
     assert report["events"][0]["executed"]
     assert client.get(f"/runs/{report['id']}/events").json() == report["events"]
+
+
+def test_catalog_price_edits_change_winner_and_page_notes_stay_in_audit(client):
+    pages = client.get("/source-pages/shopping").json()
+    pages["Store C"] = "Price INR: 1999\nStorage GB: 256\n---\nFictional display copy."
+    result = client.post("/runs", json={"scenario": "shopping", "pages": pages})
+    assert result.status_code == 201
+    report = result.json()
+    assert report["answer"] == {"store": "Store C", "price_inr": 1999}
+    assert report["task_completed"]
+    assert report["source"]["pages"] == pages
+    assert report["scoped_source"]["facts"]["Store C"] == 1999
+    assert report["scoped_source"]["specifications"]["Store C"]["storage_gb"] == 256
+    assert "Fictional display copy." not in str(report["scoped_source"])
+
+
+@pytest.mark.parametrize("page", [
+    "Price INR: 0\nStorage GB: 256",
+    "Price INR: 50000\nPrice INR: 49000\nStorage GB: 256",
+    "Storage GB: 256",
+])
+def test_invalid_store_page_fails_before_creating_run(client, page):
+    pages = client.get("/source-pages/shopping").json()
+    pages["Store C"] = page
+    assert client.post("/runs", json={"scenario": "shopping", "pages": pages}).status_code == 422
+    assert client.get("/metrics").json()["recent"] == []
+
+
+@pytest.mark.parametrize("scenario,page,title,expected", [
+    ("research", "Sample size: 200\nDuration weeks: 8\nCompletion percent: 90", "Research article",
+     {"sample_size": 200, "duration_weeks": 8, "completion_percent": 90}),
+    ("workspace", "Owner: Noor\nPhase: Planning\nBlocker: None", "Project update",
+     {"owner": "Noor", "phase": "Planning", "blocker": "None"}),
+])
+def test_other_scenarios_parse_edited_sources(client, scenario, page, title, expected):
+    report = client.post("/runs", json={"scenario": scenario, "pages": {title: page}}).json()
+    assert report["task_completed"] and report["answer"] == expected

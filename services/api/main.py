@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .gateway import SCENARIOS, authorize, envelope, scoped_facts
 from .runner import run_agent
+from .sources import SOURCE_PAGES, extract_sources
 
 WEB = Path(__file__).resolve().parents[2] / "apps" / "web"
 app = FastAPI(title="Ghost Shield Gateway")
@@ -28,6 +29,7 @@ class SourceInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scenario: Literal["shopping", "research", "workspace"]
     note: str = Field(default="", max_length=2000)
+    pages: dict[str, str] | None = None
 
 
 class RunInput(SourceInput):
@@ -70,7 +72,7 @@ async def request_limit(request: Request, call_next):
         if request.headers.get("transfer-encoding"):
             return JSONResponse({"detail": "Content-Length is required."}, status_code=411)
         length = request.headers.get("content-length", "")
-        if not length.isdecimal() or len(length) > 5 or int(length) > 16384:
+        if not length.isdecimal() or len(length) > 5 or int(length) > 65536:
             return JSONResponse({"detail": "Request body exceeds the allowed size."}, status_code=413)
     return await call_next(request)
 
@@ -94,11 +96,32 @@ def scenarios():
             for key, item in SCENARIOS.items()}
 
 
+@app.get("/source-pages/{scenario}")
+def source_pages(scenario: str):
+    if scenario not in SOURCE_PAGES:
+        raise HTTPException(404, "Scenario not found.")
+    return SOURCE_PAGES[scenario]
+
+
+def edited_sources(body: SourceInput):
+    if body.pages is None:
+        return None
+    if any(len(page) > 3000 for page in body.pages.values()):
+        raise HTTPException(422, "Each source page must be at most 3,000 characters.")
+    try:
+        return extract_sources(body.scenario, body.pages)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
 @app.post("/gateway/evaluate-content")
 def evaluate_content(body: SourceInput):
     scenario = SCENARIOS[body.scenario]
     source = envelope(scenario, body.note)
-    return {"source": source, "scoped": scoped_facts(scenario, source)}
+    extracted = edited_sources(body)
+    if extracted is not None:
+        source["pages"] = body.pages
+    return {"source": source, "scoped": scoped_facts(scenario, source, extracted)}
 
 
 @app.post("/gateway/authorize-action")
@@ -108,6 +131,7 @@ def authorize_action(body: PolicyInput):
 
 @app.post("/runs", status_code=201)
 async def create_run(body: RunInput, authorization: str = Header(default="")):
+    extracted = edited_sources(body)
     if body.mode == "live":
         token = os.getenv("GHOST_LAB_TOKEN")
         if not os.getenv("GHOST_MODEL_KEY") or not token:
@@ -117,9 +141,9 @@ async def create_run(body: RunInput, authorization: str = Header(default="")):
         if live_slots.locked():
             raise HTTPException(429, "A live run is already in progress.")
         async with live_slots:
-            report = await run_agent(body.scenario, body.note, body.mode, body.rehearsal)
+            report = await run_agent(body.scenario, body.note, body.mode, body.rehearsal, body.pages, extracted)
     else:
-        report = await run_agent(body.scenario, body.note, body.mode, body.rehearsal)
+        report = await run_agent(body.scenario, body.note, body.mode, body.rehearsal, body.pages, extracted)
 
     report.update(id=str(uuid4()), created_at=datetime.now(timezone.utc).isoformat())
     await asyncio.to_thread(save_run, report)

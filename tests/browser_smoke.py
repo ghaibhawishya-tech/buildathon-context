@@ -10,6 +10,17 @@ def check_lab(url):
         browser = playwright.chromium.launch(channel="chromium")
         page = browser.new_page(accept_downloads=True, viewport={"width": 1280, "height": 900})
         page.goto(url)
+        page.locator("#source-pages").get_by_text("Store C", exact=True).click()
+        page.get_by_role("textbox", name="Store C source content").fill(
+            "Price INR: 1999\nStorage GB: 256\n---\nFictional listing copy."
+        )
+        page.get_by_role("button", name="Run experiment").click()
+        expect(page.locator("#answer")).to_contain_text('"price_inr": 1999')
+        expect(page.locator("#scoped")).to_contain_text('"Store C": 1999')
+        expect(page.locator("#scoped")).not_to_contain_text("Fictional listing copy.")
+        page.get_by_role("button", name="Reset pages").click()
+        page.get_by_role("button", name="Run experiment").click()
+        expect(page.locator("#answer")).to_contain_text('"price_inr": 2499')
         page.get_by_role("button", name="Load workspace demo").click()
         expect(page.get_by_label("Scenario", exact=True)).to_have_value("workspace")
         expect(page.get_by_label("Rehearse an out-of-scope proposal")).to_have_value("send_message")

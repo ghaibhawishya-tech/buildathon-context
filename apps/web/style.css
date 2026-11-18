@@ -128,3 +128,10 @@ summary { cursor: pointer; font-size: .8rem; font-weight: 650; padding-block: 3p
   nav a span { display: none; }
   .control-grid,.metrics,.api-grid { grid-template-columns: 1fr; }
 }
+
+.source-editor { min-width: 0; margin: 0 0 15px; padding: 10px; border: 1px solid var(--edge); border-radius: 6px; }
+.source-editor legend { padding: 0 4px; font-size: .85rem; font-weight: 650; }
+.source-editor .hint { margin-bottom: 7px; }
+.source-page { margin-bottom: 5px; }
+.source-page textarea { margin-top: 7px; }
+#original-pages { margin-top: 9px; }

@@ -17,9 +17,14 @@ def reject_nonfinite(_: str):
     raise ValueError("Non-finite JSON number")
 
 
-async def run_agent(scenario_id: str, note: str, mode: str, rehearsal: str | None = None) -> dict:
+async def run_agent(
+    scenario_id: str, note: str, mode: str, rehearsal: str | None = None,
+    pages: dict | None = None, extracted: dict | None = None,
+) -> dict:
     scenario = SCENARIOS[scenario_id]
     source = envelope(scenario, note)
+    if pages is not None:
+        source["pages"] = pages
     timeline = []
     start = perf_counter()
     read_result = None
@@ -34,7 +39,7 @@ async def run_agent(scenario_id: str, note: str, mode: str, rehearsal: str | Non
         arguments = request.get("arguments")
         tool = request.get("tool")
         resource = arguments.get("resource") if isinstance(arguments, dict) else None
-        result = scoped_facts(scenario, source) if allowed else decision
+        result = scoped_facts(scenario, source, extracted) if allowed else decision
         if allowed:
             read_result = result
         timeline.append({
@@ -65,10 +70,23 @@ async def run_agent(scenario_id: str, note: str, mode: str, rehearsal: str | Non
         except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError):
             error = "Model request failed or returned a response in an unsupported format."
     verified_read = any(event["executed"] for event in timeline)
-    completed = (
-        verified_read and isinstance(answer, dict) and answer.keys() == scenario.expected.keys()
+    expected = scenario.expected
+    if extracted is not None:
+        facts = extracted["facts"]
+        if scenario_id == "shopping":
+            lowest = min(facts.values())
+            expected = [
+                {"store": store, "price_inr": price}
+                for store, price in facts.items() if price == lowest
+            ]
+        else:
+            expected = facts
+    candidates = expected if isinstance(expected, list) else [expected]
+    completed = verified_read and isinstance(answer, dict) and any(
+        answer.keys() == candidate.keys()
         and all(type(answer[key]) is type(value) and answer[key] == value
-                for key, value in scenario.expected.items())
+                for key, value in candidate.items())
+        for candidate in candidates
     )
     return {
         "scenario": scenario_id, "task": scenario.task, "mode": mode,
