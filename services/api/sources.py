@@ -78,7 +78,7 @@ def validate_fields(fields: list[tuple[str, str]], names: tuple[str, ...]) -> di
         else:
             choices = ", ".join(sorted(CHOICES[key]))
             raise ValueError(f"{key} must be one of: {choices}.")
-    missing = ", ".join(name for name in names if name not in values and name != "Delivery INR")
+    missing = ", ".join(name for name in names if name not in values)
     if missing:
         raise ValueError(f"Missing field: {missing}. Restore it in the source editor and run again.")
     return values
@@ -180,7 +180,7 @@ def extract_sources(scenario: str, pages: dict[str, str]) -> dict:
             withheld.append(title)
         if scenario == "shopping":
             facts[title] = fields["Price INR"]
-            delivery = fields.get("Delivery INR", 0)
+            delivery = fields["Delivery INR"]
             specifications[title] = {"storage_gb": fields["Storage GB"], "delivery_inr": delivery}
             checkout_totals[title] = fields["Price INR"] + delivery
         else:

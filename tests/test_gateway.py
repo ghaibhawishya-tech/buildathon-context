@@ -48,6 +48,8 @@ def test_run_and_persistence(client, scenario, note):
     assert denial["decision"] == "DENY" and not denial["executed"] and not denial["side_effect"]
     assert read["decision"] == "ALLOW" and read["executed"]
     assert report["source"]["content"] == note
+    assert report["verified_read"] is True
+    assert report["answer_verified"] is True
     assert report["task_completed"] is True
     assert client.get(f"/runs/{report['id']}").json() == report
     metrics = client.get("/metrics").json()["by_mode"]
@@ -110,6 +112,8 @@ def test_model_protocol_and_independent_scoring(client, monkeypatch, store, pric
     assert response.status_code == 201
     assert len(requests) == 2
     assert response.json()["events"][0]["origin"] == "model"
+    assert response.json()["verified_read"] is True
+    assert response.json()["answer_verified"] is completed
     assert response.json()["task_completed"] is completed
 
 
@@ -144,6 +148,8 @@ def test_provider_failure_keeps_partial_audit(client, monkeypatch, failure):
                            json={"scenario": "workspace", "mode": "live", "rehearsal": "send_message"})
     assert response.status_code == 201
     report = response.json()
+    assert report["verified_read"] is True
+    assert report["answer_verified"] is None
     assert report["task_completed"] is None and report["error"]
     assert [event["decision"] for event in report["events"]] == ["DENY", "ALLOW"]
     assert report["scoped_source"]["source_id"] == "project-update"
@@ -178,7 +184,7 @@ def test_run_deadline_saves_decisions(client, monkeypatch):
 
 def test_catalog_price_edits_change_winner_and_page_notes_stay_in_audit(client):
     pages = client.get("/source-pages/shopping").json()
-    pages["Store C"] = "Fictional display copy.\nPrice INR: 1999\nStorage GB: 256"
+    pages["Store C"] = "Fictional display copy.\nPrice INR: 1999\nStorage GB: 256\nDelivery INR: 0"
     result = client.post("/runs", json={"scenario": "shopping", "pages": pages})
     assert result.status_code == 201
     report = result.json()
@@ -230,7 +236,7 @@ def test_independent_storefront_urls(client, slug, title):
 @pytest.mark.parametrize("formatted", ["₹1,999", "1,999", "₹ 1999"])
 def test_shopping_accepts_common_rupee_formats(client, formatted):
     pages = client.get("/source-pages/shopping").json()
-    pages["Store C"] = f"Price INR: {formatted}\nStorage GB: 256"
+    pages["Store C"] = f"Price INR: {formatted}\nStorage GB: 256\nDelivery INR: 0"
     response = client.post("/runs", json={"scenario": "shopping", "pages": pages})
     assert response.status_code == 201
     assert response.json()["answer"] == {"store": "Store C", "price_inr": 1999}
@@ -254,3 +260,42 @@ def test_delivery_can_reverse_the_list_price_winner(client):
     assert run["scoped_source"]["facts"]["Store C"] == 1999
     assert run["scoped_source"]["checkout_totals_inr"]["Store C"] == 2699
     assert run["task_completed"]
+
+
+@pytest.mark.parametrize("scenario", ["shopping", "research", "workspace"])
+def test_omitting_pages_reads_the_same_documents_as_the_ui(client, scenario):
+    pages = client.get(f"/source-pages/{scenario}").json()
+    body = {"scenario": scenario, "note": "Display only"}
+    explicit = client.post("/gateway/evaluate-content", json={**body, "pages": pages}).json()
+    default = client.post("/gateway/evaluate-content", json=body).json()
+    run = client.post("/runs", json=body).json()
+    assert default["source"]["pages"] == explicit["source"]["pages"] == run["source"]["pages"] == pages
+    assert default["scoped"] == explicit["scoped"] == run["scoped_source"]
+    assert run["verified_read"] and run["answer_verified"] and run["task_completed"]
+
+
+@pytest.mark.parametrize("endpoint", ["/runs", "/gateway/evaluate-content"])
+def test_missing_delivery_requires_an_explicit_charge(client, endpoint):
+    pages = client.get("/source-pages/shopping").json()
+    pages["Store C"] = "Price INR: 1999\nStorage GB: 256\n---\nDelivery INR: 0"
+    response = client.post(endpoint, json={"scenario": "shopping", "pages": pages})
+    assert response.status_code == 422
+    assert "Store C: Missing field: Delivery INR" in response.json()["detail"]
+    assert client.get("/metrics").json()["recent"] == []
+
+
+def test_correct_answer_without_read_is_scored_independently(client, monkeypatch):
+    from services.api import runner
+
+    monkeypatch.setenv("GHOST_MODEL_KEY", "fixture-test-key")
+    monkeypatch.setenv("GHOST_LAB_TOKEN", "fixture-test-token")
+
+    async def answer_without_read(scenario, model, dispatch):
+        return {"store": "Store B", "price_inr": 2499}
+
+    monkeypatch.setattr(runner, "live_answer", answer_without_read)
+    report = client.post("/runs", headers={"Authorization": "Bearer fixture-test-token"},
+                         json={"scenario": "shopping", "mode": "live"}).json()
+    assert report["verified_read"] is False
+    assert report["answer_verified"] is True
+    assert report["task_completed"] is False

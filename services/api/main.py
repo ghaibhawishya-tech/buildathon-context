@@ -117,13 +117,12 @@ def source_pages(scenario: str):
     return SOURCE_PAGES[scenario]
 
 
-def edited_sources(body: SourceInput):
-    if body.pages is None:
-        return None
-    if any(len(page) > 3000 for page in body.pages.values()):
+def resolve_sources(body: SourceInput):
+    pages = SOURCE_PAGES[body.scenario] if body.pages is None else body.pages
+    if any(len(page) > 3000 for page in pages.values()):
         raise HTTPException(422, "Each source page must be at most 3,000 characters.")
     try:
-        return extract_sources(body.scenario, body.pages)
+        return pages, extract_sources(body.scenario, pages)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -131,11 +130,9 @@ def edited_sources(body: SourceInput):
 @app.post("/gateway/evaluate-content")
 def evaluate_content(body: SourceInput):
     scenario = SCENARIOS[body.scenario]
-    source = envelope(scenario, body.note)
-    extracted = edited_sources(body)
-    if extracted is not None:
-        source["pages"] = body.pages
-    return {"source": source, "scoped": scoped_facts(scenario, source, extracted)}
+    pages, extracted = resolve_sources(body)
+    source = envelope(scenario, body.note, pages)
+    return {"source": source, "scoped": scoped_facts(source, extracted)}
 
 
 @app.post("/gateway/authorize-action")
@@ -145,7 +142,7 @@ def authorize_action(body: PolicyInput):
 
 @app.post("/runs", status_code=201)
 async def create_run(body: RunInput, authorization: str = Header(default="")):
-    extracted = edited_sources(body)
+    pages, extracted = resolve_sources(body)
     if body.mode == "live":
         token = os.getenv("GHOST_LAB_TOKEN")
         if not os.getenv("GHOST_MODEL_KEY") or not token:
@@ -155,9 +152,9 @@ async def create_run(body: RunInput, authorization: str = Header(default="")):
         if live_slots.locked():
             raise HTTPException(429, "A live run is already in progress.")
         async with live_slots:
-            report = await run_agent(body.scenario, body.note, body.mode, body.rehearsal, body.pages, extracted)
+            report = await run_agent(body.scenario, body.note, body.mode, body.rehearsal, pages, extracted)
     else:
-        report = await run_agent(body.scenario, body.note, body.mode, body.rehearsal, body.pages, extracted)
+        report = await run_agent(body.scenario, body.note, body.mode, body.rehearsal, pages, extracted)
 
     report.update(id=str(uuid4()), created_at=datetime.now(timezone.utc).isoformat())
     await asyncio.to_thread(save_run, report)
