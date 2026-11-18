@@ -118,11 +118,30 @@ See [RULES.md](RULES.md) for the full list.
 
 ## Your project
 
-_Replace this section with your project README:_
-- **Team:**
-- **Track:**
-- **Problem:** who faces it and why it happens
-- **What we built:** the core workflow
-- **The hardest part:** how we solved it
-- **How to run it:**
-- **Demo / screenshots:**
+**Context · Ghost//Shield · Build for AI Agents**
+
+Agent developers need to give models access to useful data without giving external content the authority to expand tool permissions. Ghost//Shield lets you inspect the policy decision before a read occurs, then independently verifies the agent's answer.
+
+### Run locally
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m uvicorn services.api.main:app
+```
+
+Open [the lab](http://127.0.0.1:8000/) or the [OpenAPI reference](http://127.0.0.1:8000/docs). Fixture mode requires no credentials. For live mode, set `GHOST_MODEL_KEY` and `GHOST_LAB_TOKEN` on the server, restart it, then enter the lab token in the UI. Configure `GHOST_MODEL` and `GHOST_MODEL_BASE_URL` if using a different OpenAI-compatible provider. API credentials stay on the server.
+
+```sh
+.venv/bin/python -m pytest -q
+```
+
+To verify the interface, start the local server above and run the browser smoke test in a separate terminal. It uses an isolated headless browser and records a fictional experiment in the local database.
+
+```sh
+.venv/bin/python -m pip install playwright
+.venv/bin/python -m playwright install chromium
+.venv/bin/python tests/browser_smoke.py http://127.0.0.1:8000
+```
+
+See the [three-minute demo](docs/demo-script.md), [architecture and hosting guide](docs/architecture.md), [threat model](docs/threat-model.md), [evaluation notes](docs/benchmark.md), and [Python integration](examples/gateway_client.py).

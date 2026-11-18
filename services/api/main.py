@@ -65,7 +65,10 @@ async def request_limit(request: Request, call_next):
 
 @app.get("/", include_in_schema=False)
 def index():
-    return FileResponse(WEB / "index.html")
+    return FileResponse(WEB / "index.html", headers={
+        "Content-Security-Policy": "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+        "X-Content-Type-Options": "nosniff",
+    })
 
 
 @app.get("/health")

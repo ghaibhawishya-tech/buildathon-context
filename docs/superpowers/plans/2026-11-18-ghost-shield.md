@@ -10,7 +10,7 @@
 
 **Spec:** User-supplied Ghost Shield master build brief, with a read-only defensive lab.
 
-- [ ] Build the fixture catalog, provenance model and independent tool policy. Test missing context, malformed requests and out-of-scope proposals.
-- [ ] Implement isolated read-only model runs and deterministic fixture runs. Check the reported answer against fixture truth and persist evidence.
-- [ ] Build the lab, dashboard, investigation and API playground. Verify the editing, running and export flow.
-- [ ] Document integration, threat model, deployment and demonstration. Run the test suite and push reviewed commits.
+- [x] Build the fixture catalog, provenance model and independent tool policy. Test missing context, malformed requests and out-of-scope proposals.
+- [x] Implement isolated read-only model runs and deterministic fixture runs. Check the reported answer against fixture truth and persist evidence.
+- [x] Build the lab, dashboard, investigation and API playground. Verify the editing, running and export flow.
+- [x] Document integration, threat model, deployment and demonstration. Run the test suite and push reviewed commits.

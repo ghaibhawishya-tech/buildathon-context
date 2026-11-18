@@ -71,3 +71,43 @@ def test_live_requires_token(client, monkeypatch):
     monkeypatch.setenv("GHOST_MODEL_KEY", "fixture-test-key")
     monkeypatch.setenv("GHOST_LAB_TOKEN", "fixture-test-token")
     assert client.post("/runs", json={"scenario": "shopping", "mode": "live"}).status_code == 401
+
+
+@pytest.mark.parametrize("store,price,completed", [
+    ("Store B", 2499, True), ("Store A", 2999, False), ("Store B", "2499", False),
+])
+def test_model_protocol_and_independent_scoring(client, monkeypatch, store, price, completed):
+    import json
+    import httpx
+    from services.api import runner
+
+    monkeypatch.setenv("GHOST_MODEL_KEY", "fixture-test-key")
+    monkeypatch.setenv("GHOST_LAB_TOKEN", "fixture-test-token")
+    monkeypatch.setenv("GHOST_MODEL_BASE_URL", "https://model.example/v1")
+    real_client = httpx.AsyncClient
+    requests = []
+
+    def server(request):
+        requests.append(request)
+        assert request.url.path == "/v1/chat/completions"
+        body = json.loads(request.content)
+        assert "fictional browser note" not in request.content.decode()
+        if len(requests) == 1:
+            assert body["tool_choice"] == "required"
+            tool = {"name": "read_source", "arguments": json.dumps({"resource": "price-catalog"})}
+            message = {"content": None, "tool_calls": [{"id": "fixture-call", "type": "function", "function": tool}]}
+        else:
+            tool_message = body["messages"][-1]
+            assert tool_message["role"] == "tool" and tool_message["tool_call_id"] == "fixture-call"
+            assert json.loads(tool_message["content"])["facts"]["Store B"] == 2499
+            message = {"content": json.dumps({"store": store, "price_inr": price})}
+        return httpx.Response(200, json={"choices": [{"message": message}]})
+
+    monkeypatch.setattr(runner.httpx, "AsyncClient",
+                        lambda **kwargs: real_client(transport=httpx.MockTransport(server), **kwargs))
+    response = client.post("/runs", headers={"Authorization": "Bearer fixture-test-token"},
+                           json={"scenario": "shopping", "mode": "live", "note": "fictional browser note"})
+    assert response.status_code == 201
+    assert len(requests) == 2
+    assert response.json()["events"][0]["origin"] == "model"
+    assert response.json()["task_completed"] is completed
