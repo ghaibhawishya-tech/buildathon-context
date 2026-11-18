@@ -146,4 +146,4 @@ To verify the interface, start the local server above and run the browser smoke 
 .venv/bin/python tests/browser_smoke.py http://127.0.0.1:8000
 ```
 
-See the [three-minute demo](docs/demo-script.md), [architecture and hosting guide](docs/architecture.md), [threat model](docs/threat-model.md), [evaluation notes](docs/benchmark.md), and [Python integration](examples/gateway_client.py).
+See the [step-by-step test guide](docs/testing.md), [three-minute demo](docs/demo-script.md), [architecture and hosting guide](docs/architecture.md), [threat model](docs/threat-model.md), [evaluation notes](docs/benchmark.md), and [Python integration](examples/gateway_client.py).

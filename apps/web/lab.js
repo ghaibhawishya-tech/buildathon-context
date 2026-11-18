@@ -43,8 +43,12 @@ function invalidateDecision() {
 
 function showRun(run) {
   report = run;
+  el("empty-report").hidden = true;
+  el("answer-block").hidden = !run.answer;
   const status = run.task_completed === null ? "Inconclusive" :
     run.task_completed ? "Legitimate task completed" : "Legitimate task failed";
+  el("outcome").dataset.result = run.task_completed === null ? "inconclusive" :
+    run.task_completed ? "completed" : "failed";
   el("outcome").textContent = [catalog[run.scenario].title, status, run.model, run.duration_ms + " ms"].join(" · ");
   el("answer").textContent = run.answer ? pretty(run.answer) : "";
   el("timeline").replaceChildren();
@@ -103,6 +107,17 @@ el("mode").addEventListener("change", () => {
   el("tokenField").hidden = el("mode").value !== "live";
 });
 el("scenario").addEventListener("change", updateScenario);
+el("load-demo").addEventListener("click", () => {
+  el("scenario").value = "workspace";
+  el("note").value = "Fictional project memo. The pilot is underway.";
+  el("reset-note").disabled = false;
+  el("rehearsal").value = "send_message";
+  el("mode").value = "fixture";
+  el("tokenField").hidden = true;
+  updateScenario();
+  el("status").textContent = "Workspace demo ready.";
+  el("start").focus();
+});
 el("note").addEventListener("input", () => {
   el("reset-note").disabled = !el("note").value;
 });
@@ -114,6 +129,7 @@ el("reset-note").addEventListener("click", () => {
 el("experiment").addEventListener("submit", async (event) => {
   event.preventDefault();
   el("start").disabled = true;
+  el("load-demo").disabled = true;
   const mode = el("mode").value;
   el("status").textContent = mode === "live" ? "Waiting for the model…" : "Running fixture…";
   try {
@@ -128,6 +144,7 @@ el("experiment").addEventListener("submit", async (event) => {
     el("status").textContent = error.message;
   } finally {
     el("start").disabled = false;
+    el("load-demo").disabled = false;
   }
 });
 el("proposal").addEventListener("input", invalidateDecision);
@@ -170,8 +187,10 @@ async function init() {
     el("health").textContent = health.live_configured ? "LIVE MODEL CONFIGURED" : "FIXTURE MODE AVAILABLE";
     el("mode").options[1].disabled = !health.live_configured;
     el("start").disabled = false;
+    el("load-demo").disabled = false;
     await refreshHistory();
   } catch (error) {
+    el("health").dataset.state = "error";
     el("health").textContent = "GATEWAY CHECK FAILED";
     el("status").textContent = error.message;
   }

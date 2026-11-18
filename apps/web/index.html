@@ -1,54 +1,121 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="dark">
-<title>Ghost//Shield — Agent Security Lab</title>
-<link rel="stylesheet" href="/assets/style.css">
-<script src="/assets/lab.js" defer></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Ghost//Shield — Agent Security Lab</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/lab.js" defer></script>
 </head>
 <body>
-<header><div class="shell bar"><a class="brand" href="#">GHOST<span>//</span>SHIELD</a><nav><a href="#lab">Lab</a><a href="#history">History</a><a href="#api">API</a></nav></div></header>
-<main class="shell">
-<div class="hero"><p class="eyebrow">AGENT SECURITY LAB</p><h1>Don’t trust what<br>your agent reads.</h1><p>Test scoped tool access and verify how your agent uses untrusted sources.</p></div>
-<section id="lab">
-<div class="bar"><h2>Run an experiment</h2><span class="badge" id="health">Checking gateway</span></div>
-<div class="grid">
-<form class="panel" id="experiment">
-<label for="scenario">Scenario</label><select id="scenario" required></select><p id="task"></p>
-<label for="note">Untrusted source note</label><textarea id="note" aria-describedby="note-hint" rows="4" maxlength="2000" placeholder="Add a fictional note to the source"></textarea>
-<p class="hint" id="note-hint">Use fictional data. The note goes into the audit, and the agent receives the fixture’s structured facts.</p>
-<button type="button" class="secondary" id="reset-note" disabled>Clear note</button>
-<label for="rehearsal">Rehearse an out-of-scope proposal</label>
-<select id="rehearsal"><option value="">None</option><option>read_private_note</option><option>send_message</option></select>
-<label for="mode">Execution mode</label><select id="mode"><option value="fixture">Deterministic fixture</option><option value="live">Live model</option></select>
-<div id="tokenField" hidden><label for="token">Lab token</label><input id="token" type="password" autocomplete="off"></div>
-<button id="start" disabled>Run experiment</button><p id="status" class="hint" role="status"></p>
-</form>
-<article class="panel">
-<div class="bar"><h3>Investigation</h3><button id="export" class="secondary" disabled>Export JSON</button></div>
-<p id="outcome" tabindex="-1" aria-live="polite">Run an experiment to see the tool decisions and verified outcome.</p>
-<pre id="answer"></pre><div id="timeline"></div>
-<details id="boundary" hidden open>
-<summary>Inspect the content boundary</summary>
-<div class="grid evidence">
-<div><h4>Untrusted source note</h4><pre id="original"></pre></div>
-<div><h4>Data returned by the gateway</h4><pre id="scoped"></pre></div>
-</div>
-</details>
-<details id="report" hidden><summary>Full run evidence</summary><pre id="payload"></pre></details>
-</article>
-</div>
-</section>
-<section id="history"><h2>Command center</h2><p id="history-status" class="hint" role="status"></p><div class="grid" id="metrics"></div><div class="panel recent" id="recent">No experiments recorded yet.</div></section>
-<section id="api"><div class="bar"><h2>Gateway API</h2><a href="/docs">OpenAPI reference ↗</a></div>
-<form class="panel" id="playground"><p>Evaluate a proposal against the selected scenario’s policy. The playground does not execute tools.</p>
-<p id="policy-context"></p>
-<label for="proposal">Proposal JSON</label><textarea id="proposal" rows="5" required spellcheck="false"></textarea>
-<button type="button" class="secondary" id="reset-proposal">Use example proposal</button>
-<button class="secondary">Check authorization</button><pre id="decision" aria-live="polite"></pre></form>
-</section>
-</main><footer class="shell">Ghost//Shield · Context</footer>
+  <a class="skip-link" href="#lab">Skip to the lab</a>
+  <aside class="rail">
+    <a class="brand" href="#lab"><span class="mark" aria-hidden="true"><i></i></span><span>GHOST<span class="brand-slash">//</span>SHIELD</span></a>
+    <nav aria-label="Workspace">
+      <p class="rail-label">Workspace</p>
+      <a href="#lab"><span aria-hidden="true">◈</span>Experiment lab</a>
+      <a href="#history"><span aria-hidden="true">≡</span>Run history</a>
+      <a href="#api"><span aria-hidden="true">⌘</span>Gateway API</a>
+    </nav>
+    <div class="rail-footer"><span class="context-mark" aria-hidden="true">C</span><span><strong>Context</strong><small>Buildathon workspace</small></span></div>
+  </aside>
+  <main class="workspace">
+    <section id="lab" aria-labelledby="lab-title">
+      <div class="intro">
+        <div>
+          <p class="eyebrow"><span></span> AGENT SECURITY</p>
+          <h1 id="lab-title">Experiment lab<span>.</span></h1>
+          <p>Test what an agent can access, inspect each tool decision, and verify the answer against known facts.</p>
+        </div>
+        <span id="health" class="status-badge" role="status">Checking gateway</span>
+      </div>
+
+      <div class="lab-grid">
+        <form class="panel" id="experiment" aria-labelledby="config-title">
+          <div class="panel-head">
+            <div><p class="eyebrow">SETUP</p><h2 id="config-title">Configure a run</h2></div>
+            <button type="button" id="load-demo" class="secondary compact" disabled>Load workspace demo</button>
+          </div>
+          <div class="panel-body">
+            <label for="scenario">Scenario</label>
+            <select id="scenario" required></select>
+            <p id="task" class="task"></p>
+
+            <label for="note">Untrusted source note</label>
+            <textarea id="note" aria-describedby="note-hint" rows="4" maxlength="2000" placeholder="Add a fictional note to the source…"></textarea>
+            <div class="note-foot">
+              <p class="hint" id="note-hint">Fictional data only. The note stays in the audit.</p>
+              <button type="button" class="text-button" id="reset-note" disabled>Clear note</button>
+            </div>
+
+            <div class="control-grid">
+              <div>
+                <label for="rehearsal">Rehearse an out-of-scope proposal</label>
+                <select id="rehearsal"><option value="">None</option><option value="read_private_note">read_private_note</option><option value="send_message">send_message</option></select>
+              </div>
+              <div>
+                <label for="mode">Execution mode</label>
+                <select id="mode"><option value="fixture">Deterministic fixture</option><option value="live">Live model</option></select>
+              </div>
+            </div>
+            <div id="tokenField" hidden><label for="token">Lab token</label><input id="token" type="password" autocomplete="off"></div>
+          </div>
+          <div class="panel-foot">
+            <p id="status" class="hint" role="status"></p>
+            <button id="start" disabled><span aria-hidden="true">▷</span> Run experiment</button>
+          </div>
+        </form>
+
+        <article class="panel" aria-labelledby="result-title">
+          <div class="panel-head">
+            <div><p class="eyebrow">EVIDENCE</p><h2 id="result-title">Investigation</h2></div>
+            <button id="export" type="button" class="secondary compact" disabled>Export JSON <span aria-hidden="true">↓</span></button>
+          </div>
+          <div class="panel-body report-body">
+            <div id="empty-report" class="empty-report">
+              <div class="sequence" aria-hidden="true"><span>+</span><span>◇</span><span>✓</span></div>
+              <p class="sequence-label" aria-hidden="true">SOURCE <i></i> POLICY <i></i> VERIFIED ANSWER</p>
+              <h3>Waiting for the first run</h3>
+              <p>Launch an experiment to see the gateway’s decisions and the independently checked result.</p>
+            </div>
+            <p id="outcome" tabindex="-1" aria-live="polite" class="result-status"></p>
+            <div id="answer-block" hidden><h3 class="field-heading">Agent answer</h3><pre id="answer"></pre></div>
+            <div id="timeline"></div>
+            <details id="boundary" hidden open>
+              <summary>Inspect the content boundary</summary>
+              <div class="evidence">
+                <div><h4>Untrusted source note</h4><pre id="original"></pre></div>
+                <div><h4>Data returned by the gateway</h4><pre id="scoped"></pre></div>
+              </div>
+            </details>
+            <details id="report" hidden><summary>Full run evidence</summary><pre id="payload"></pre></details>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="history" aria-labelledby="history-title">
+      <div class="section-head"><div><p class="eyebrow">AUDIT LOG</p><h2 id="history-title">Run history</h2></div><p id="history-status" class="hint" role="status"></p></div>
+      <div id="metrics" class="metrics"></div>
+      <div class="panel recent" id="recent">No experiments recorded yet.</div>
+    </section>
+
+    <section id="api" aria-labelledby="api-title">
+      <div class="section-head"><div><p class="eyebrow">DEVELOPER TOOLS</p><h2 id="api-title">Gateway API</h2></div><a class="docs-link" href="/docs">OpenAPI reference ↗</a></div>
+      <form class="panel api-grid" id="playground">
+        <div>
+          <label for="proposal">Proposal JSON</label>
+          <textarea id="proposal" rows="7" required spellcheck="false"></textarea>
+          <div class="button-row"><button type="submit">Check authorization</button><button type="button" class="secondary" id="reset-proposal">Use example proposal</button></div>
+        </div>
+        <div class="policy-panel">
+          <p id="policy-context"></p>
+          <p class="hint">Check a proposal against the selected scenario’s policy. This playground does not execute tools.</p>
+          <pre id="decision" aria-live="polite"></pre>
+        </div>
+      </form>
+    </section>
+  </main>
 </body>
 </html>

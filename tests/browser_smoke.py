@@ -10,7 +10,10 @@ def check_lab(url):
         browser = playwright.chromium.launch(channel="chromium")
         page = browser.new_page(accept_downloads=True, viewport={"width": 1280, "height": 900})
         page.goto(url)
-        page.get_by_label("Scenario", exact=True).select_option("workspace")
+        page.get_by_role("button", name="Load workspace demo").click()
+        expect(page.get_by_label("Scenario", exact=True)).to_have_value("workspace")
+        expect(page.get_by_label("Rehearse an out-of-scope proposal")).to_have_value("send_message")
+        expect(page.get_by_role("button", name="Run experiment")).to_be_focused()
         note = "<b>Fictional memo</b>"
         editor = page.get_by_label("Untrusted source note")
         editor.fill("Temporary note")
