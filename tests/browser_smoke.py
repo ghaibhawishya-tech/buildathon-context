@@ -10,6 +10,15 @@ def check_lab(url):
         browser = playwright.chromium.launch(channel="chromium")
         page = browser.new_page(accept_downloads=True, viewport={"width": 1280, "height": 900})
         page.goto(url)
+        guide = page.get_by_role("region", name="Try it in 60 seconds")
+        for slug in ("a", "b", "c"):
+            store_name = "Store " + slug.upper()
+            with page.expect_popup() as opened:
+                guide.get_by_role("link", name=store_name).click()
+            listing = opened.value
+            expect(listing.get_by_role("heading", name=store_name)).to_be_visible()
+            expect(listing.locator("body")).to_have_class("storefront storefront-" + slug)
+            listing.close()
         page.locator("#source-pages").get_by_text("Store C", exact=True).click()
         page.get_by_role("textbox", name="Store C source content").fill(
             "Fictional listing copy.\nPrice INR: 1999\nStorage GB: 256"

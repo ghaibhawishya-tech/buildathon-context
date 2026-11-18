@@ -14,6 +14,7 @@
     <a class="brand" href="#lab"><span class="mark" aria-hidden="true"><i></i></span><span>GHOST<span class="brand-slash">//</span>SHIELD</span></a>
     <nav aria-label="Workspace">
       <a href="#lab"><span aria-hidden="true">◈</span>Experiment lab</a>
+      <a href="#judge-guide"><span aria-hidden="true">→</span>Judge walkthrough</a>
       <a href="#history"><span aria-hidden="true">≡</span>Run history</a>
       <a href="#api"><span aria-hidden="true">⌘</span>Gateway API</a>
     </nav>
@@ -32,6 +33,23 @@
           <span class="orbit-core"></span><span class="orbit-satellite"></span><span class="orbit-point"></span>
         </div>
       </div>
+
+      <section id="judge-guide" class="judge-guide" aria-labelledby="judge-title">
+        <div class="judge-heading">
+          <h2 id="judge-title">Try it in 60 seconds</h2>
+          <p>A walkthrough for judges. Fixture mode works without credentials.</p>
+        </div>
+        <ol class="judge-steps">
+          <li><strong>Open the storefronts.</strong> Inspect the three simulated listings for the same product.</li>
+          <li><strong>Change a price.</strong> In <a href="#experiment">Configure a run</a>, choose Shopping and open Store C. Set <code>Price INR: 1999</code>, then run. Expect Store C at ₹1,999.</li>
+          <li><strong>Check the policy.</strong> Click <b>Load workspace demo</b> and run again. Expand the denied send and the allowed read in Investigation.</li>
+        </ol>
+        <div class="store-grid" aria-label="Open simulated storefronts">
+          <a class="store-card store-a" href="/stores/a" target="_blank" rel="noopener"><strong>Store A</strong><span>Open storefront ↗</span></a>
+          <a class="store-card store-b" href="/stores/b" target="_blank" rel="noopener"><strong>Store B</strong><span>Open storefront ↗</span></a>
+          <a class="store-card store-c" href="/stores/c" target="_blank" rel="noopener"><strong>Store C</strong><span>Open storefront ↗</span></a>
+        </div>
+      </section>
 
       <div class="lab-grid">
         <form class="panel" id="experiment" aria-labelledby="config-title">

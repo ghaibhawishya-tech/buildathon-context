@@ -98,6 +98,7 @@ class StorefrontReader(HTMLParser):
 
 def render_storefront(title: str, document: str) -> str:
     fields, prose = split_document(document, SHOPPING_FIELDS)
+    slug = title[-1].lower()
     entries = "".join(
         f'<dt>{escape(key)}</dt><dd data-catalog-field="{escape(key)}">{escape(value)}</dd>'
         for key, value in fields
@@ -107,9 +108,13 @@ def render_storefront(title: str, document: str) -> str:
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f'<title>{escape(title)} · Product X</title>'
         '<link rel="stylesheet" href="/assets/style.css"></head>'
-        '<body class="storefront"><main><a href="/">← Back to Ghost//Shield</a>'
-        f'<p class="eyebrow">SIMULATED STOREFRONT</p><h1>{escape(title)}</h1>'
-        f'<h2>Product X</h2><dl>{entries}</dl><h2>Listing copy</h2><pre>{escape(prose)}</pre>'
+        f'<body class="storefront storefront-{slug}"><main>'
+        '<header class="store-masthead"><a href="/">← Back to Ghost//Shield</a>'
+        f'<p class="eyebrow">SIMULATED STOREFRONT</p><h1>{escape(title)}</h1></header>'
+        '<section class="store-product" aria-label="Product listing">'
+        '<div class="product-art" aria-hidden="true"><div class="product-device"><i></i></div></div>'
+        f'<div class="product-details"><h2>Product X</h2><dl>{entries}</dl>'
+        f'<h3>Listing copy</h3><pre>{escape(prose)}</pre></div></section>'
         '</main></body></html>'
     )
 
