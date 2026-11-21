@@ -3,44 +3,37 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#101016" />
+    <meta name="theme-color" content="#f5f0e8" />
     <title>Aftertone — Clip studio</title>
     <link rel="icon" href="/static/icon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Geist:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/static/style.css" />
     <link rel="stylesheet" href="/static/studio.css" />
   </head>
   <body>
-    <aside>
-      <a href="/" class="brand"
-        ><img src="/static/icon.svg" alt="" />Aftertone</a
-      ><small>WORKSPACE</small>
-      <nav>
-        <button data-page="studio" class="active"><i>◫</i> Clip studio</button
-        ><button data-page="calendar"><i>▦</i> Content calendar</button
-        ><button data-page="memory"><i>≋</i> Brand memory</button>
-        <button data-page="brief"><i>◧</i> Project brief</button>
+    <header class="masthead">
+      <a href="/" class="brand">Aftertone<span aria-hidden="true">.</span></a>
+      <nav aria-label="Workspace">
+        <button data-page="studio" class="active">Clip studio</button>
+        <button data-page="calendar">Content calendar</button>
+        <button data-page="memory">Brand memory</button>
+        <button data-page="brief">Project brief</button>
       </nav>
-      <div class="foot">
-        <a href="/download">↓ &nbsp; Download studio</a
-        ><span class="avatar">A</span> Creator workspace
+      <div class="mast-actions">
+        <a class="download-link" href="/download" aria-label="Download studio"
+          ><span aria-hidden="true">↓</span> <span>Download</span></a
+        >
+        <button class="primary" id="new">
+          Upload recording <span aria-hidden="true">↗</span>
+        </button>
       </div>
-    </aside>
+    </header>
     <div class="shell">
-      <header>
-        <span>Workspace <b>/</b> <strong id="crumb">Clip studio</strong></span
-        ><a
-          class="mobile-download"
-          href="/download"
-          aria-label="Download studio"
-          >↓ Studio</a
-        ><button class="primary" id="new">↑ Upload recording</button>
-      </header>
       <main id="main" aria-live="polite">Opening studio…</main>
     </div>
     <dialog id="importer">

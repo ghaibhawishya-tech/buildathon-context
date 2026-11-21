@@ -133,23 +133,42 @@ function cutTimeline(clips) {
       .join("")}</div></section>`;
 }
 
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+let studioIntroduced = false;
+
 function motionStage() {
-  return `<div class="motion-stage" aria-hidden="true">
-    <div class="stage-orbit"></div><div class="stage-line stage-line-top"></div><div class="stage-line stage-line-bottom"></div>
-    <div class="stage-reel"><div class="film-perfs"></div><div class="reel-image"></div><div class="film-perfs"></div></div>
-    <div class="stage-type"><span>FROM RECORDING TO CLIP</span><strong>60:00<span class="take-arrow">↘</span><em>00:30</em></strong></div><div class="stage-scan"></div>
-  </div>`;
+  return `<figure class="hero-feature">
+    <div class="feature-image"></div>
+    ${state.films ? '<button class="feature-play" data-page="brief" data-film="true"><span class="play-icon" aria-hidden="true">▶</span><span>The editorial film <small>00:36</small></span><span aria-hidden="true">↗</span></button>' : ""}
+  </figure>`;
+}
+
+function navigate(destination, playFilm = false) {
+  if (page === destination) return;
+  const update = () => {
+    page = destination;
+    paint();
+    window.scrollTo(0, 0);
+    if (playFilm) {
+      const film = document.querySelector(".motionfilm video");
+      film?.play().catch(() => {});
+    }
+  };
+  if (document.startViewTransition && !reducedMotion.matches && !playFilm) {
+    document.startViewTransition(update);
+  } else {
+    update();
+  }
 }
 
 function paint() {
-  $("crumb").textContent = pages[page];
-  document
-    .querySelectorAll("nav button")
-    .forEach((b) => b.classList.toggle("active", b.dataset.page === page));
-  const header =
-    '<div class="heading"><div><small class="eyebrow">AFTERTONE / WORKSPACE</small><h1>' +
-    pages[page] +
-    "</h1></div>";
+  document.querySelectorAll("nav button").forEach((b) => {
+    const selected = b.dataset.page === page;
+    b.classList.toggle("active", selected);
+    if (selected) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
+  const header = '<div class="heading"><div><h1>' + pages[page] + "</h1></div>";
   if (page === "brief") {
     $("main").innerHTML =
       header +
@@ -250,9 +269,10 @@ function paint() {
     (c) => filter === "All arcs" || filter === c.arc,
   );
   $("main").innerHTML =
-    `<section class="hero intake">${motionStage()}<div class="hero-inner">
-      <h1>Find the <em>turn.</em></h1>
-      <p>Pull a complete story out of a long recording.</p>
+    `<section class="intake ${studioIntroduced ? "" : "arrive"}"><div class="hero-inner">
+      <span class="section-label">The clipping studio</span>
+      <h1 aria-label="Find the story inside the story."><span class="title-mask" aria-hidden="true"><span>Find the story</span></span><span class="title-mask" aria-hidden="true"><em>inside the story.</em></span></h1>
+      <p>Turn long recordings into short clips with a beginning, a turn, and a reason to watch.</p>
       <form id="quick"><label class="sr-only" for="linkbox">Recording link</label>
         <div class="linkrow"><input id="linkbox" name="link" type="url" placeholder="Paste a YouTube or media link" required><button class="primary">Find clips <span aria-hidden="true">↗</span></button></div>
         <div class="quicksettings">
@@ -260,8 +280,7 @@ function paint() {
           <label>Speech <select name="language"><option value="en-IN">English</option><option value="hi-IN">Hindi</option></select></label>
         </div><output id="quickstatus" role="status"></output>
       </form>
-      ${state.films ? '<button class="film-link" data-page="brief">▶ &nbsp; Watch the editorial film</button>' : ""}
-    </div></section><section class="sourcebar"><div><small class="tag">` +
+      </div>${motionStage()}</section><section class="sourcebar"><div><small class="tag">` +
     source +
     '</small><select id="projects" aria-label="Source recording">' +
     options +
@@ -323,6 +342,7 @@ function paint() {
     (state.metrics.length
       ? '<div class="actions"><button class="outline" id="rerank">Re-rank using retention</button></div>'
       : "");
+  studioIntroduced = true;
   $("quick").onsubmit = async (e) => {
     e.preventDefault();
     const form = e.currentTarget,
@@ -348,10 +368,35 @@ function paint() {
       project.seconds +
       '" required> seconds</label><button class="outline">Update directions</button>';
     document.querySelector(".listhead").after(toolbar);
-    if (cards.length)
-      toolbar.after(
-        document.createRange().createContextualFragment(cutTimeline(cards)),
-      );
+    if (cards.length) {
+      const board = document.createElement("div");
+      board.className = "edit-board";
+      board.innerHTML = cutTimeline(cards);
+      const directions = document.querySelector(".cards");
+      directions.before(board);
+      board.append(directions);
+      function highlight(button, on) {
+        if (!button) return;
+        const id = button.dataset.cut;
+        for (const control of board.querySelectorAll("[data-cut]")) {
+          if (control.dataset.cut === id)
+            (control.closest(".card") || control).classList.toggle(
+              "linked-cut",
+              on,
+            );
+        }
+      }
+      for (const [type, on] of [
+        ["pointerover", true],
+        ["pointerout", false],
+        ["focusin", true],
+        ["focusout", false],
+      ]) {
+        board.addEventListener(type, (event) =>
+          highlight(event.target.closest("[data-cut]"), on),
+        );
+      }
+    }
     toolbar.onsubmit = async (e) => {
       e.preventDefault();
       const btn = toolbar.querySelector("button");
@@ -526,8 +571,8 @@ function review(id) {
     if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
       transport.animate(
         [
-          { boxShadow: "0 0 0 0 #d7ff79a0" },
-          { boxShadow: "0 0 0 16px #d7ff7900" },
+          { boxShadow: "0 0 0 0 #a3312450" },
+          { boxShadow: "0 0 0 16px #a3312400" },
         ],
         650,
       );
@@ -616,11 +661,7 @@ document.addEventListener("click", async (e) => {
   const b = e.target.closest("button");
   if (!b) return;
   if (b.classList.contains("close")) b.closest("dialog").close();
-  if (b.dataset.page) {
-    page = b.dataset.page;
-    paint();
-    window.scrollTo(0, 0);
-  }
+  if (b.dataset.page) navigate(b.dataset.page, b.dataset.film === "true");
   if (b.dataset.cut) review(b.dataset.cut);
   if (b.dataset.platform) {
     platform = b.dataset.platform;

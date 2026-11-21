@@ -5,3 +5,5 @@ data/
 __pycache__/
 *.zip
 exports/
+
+.agents/skills/frontend-atlas/
