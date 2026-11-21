@@ -139,8 +139,16 @@ def rank(rows, feedback, levels=()):
                 )
             if not reasons:
                 reasons.append("A continuous thought fits the target editorial length.")
+            clauses = [
+                phrase.strip()
+                for line in lines
+                for phrase in re.split(
+                    r"(?<=[.!?।])\s+|,\s+|\s+(?=लेकिन|but then|then I realized)", line
+                )
+                if len(phrase.split()) >= 3
+            ]
             title = max(
-                lines,
+                clauses or lines,
                 key=lambda t: (
                     hits(t, "Discovery") * 2
                     + abs(sentiment(t))
@@ -155,7 +163,9 @@ def rank(rows, feedback, levels=()):
                     end=window[-1][1],
                     rows=window,
                     arc=arc,
-                    title=title,
+                    title=title
+                    if len(title.split()) <= 18
+                    else " ".join(title.split()[:16]) + "…",
                     score=round(max(1, min(99, score))),
                     reasons=reasons,
                     curve=curve,

@@ -67,15 +67,29 @@ function bind(id, fn) {
 }
 const url = (tail = "") => "/api/projects/" + project.id + tail;
 const cuturl = (tail) => url("/" + current.id + tail);
+let activeRefresh = 0,
+  progressTimer;
 async function refresh(id) {
+  const version = ++activeRefresh;
+  clearTimeout(progressTimer);
   state = await api("/api/studio");
   let pid = id || project?.id || state.projects[0]?.id;
   if (!pid) {
     pid = (await api("/api/demo", {})).id;
     state = await api("/api/studio");
   }
-  project = await api("/api/projects/" + pid);
+  const updated = await api("/api/projects/" + pid);
+  if (version !== activeRefresh) return;
+  project = updated;
   paint();
+  if (
+    /^(Reading source|Transcribing|Finding emotional arcs)/.test(project.status)
+  ) {
+    progressTimer = setTimeout(
+      () => refresh(pid).catch((e) => message(e.message)),
+      1400,
+    );
+  }
 }
 function bars(c) {
   const values = c.waveform?.length
@@ -399,16 +413,6 @@ $("upload").onsubmit = async (e) => {
     page = "studio";
     filter = "All arcs";
     await refresh(id);
-    while (
-      project.id === id &&
-      /^(Reading source|Transcribing|Finding emotional arcs)/.test(
-        project.status,
-      )
-    ) {
-      await new Promise((r) => setTimeout(r, 1400));
-      if (project.id !== id) break;
-      await refresh(id);
-    }
   } catch (e) {
     $("service").textContent = e.message;
   } finally {
