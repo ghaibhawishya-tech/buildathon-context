@@ -13,6 +13,7 @@ const pages = {
   studio: "Clip studio",
   calendar: "Content calendar",
   memory: "Brand memory",
+  brief: "Project brief",
 };
 let state,
   project,
@@ -83,7 +84,9 @@ async function refresh(id) {
   project = updated;
   paint();
   if (
-    /^(Reading source|Transcribing|Finding emotional arcs)/.test(project.status)
+    /^(Reading source|Fetching linked recording|Transcribing|Finding emotional arcs)/.test(
+      project.status,
+    )
   ) {
     progressTimer = setTimeout(
       () => refresh(pid).catch((e) => message(e.message)),
@@ -113,6 +116,12 @@ function paint() {
     '<div class="heading"><div><small class="eyebrow">AFTERTONE / WORKSPACE</small><h1>' +
     pages[page] +
     "</h1></div>";
+  if (page === "brief") {
+    $("main").innerHTML =
+      header +
+      '</div><article class="briefarticle"><small class="tag">Product Space · Problem 01</small><h2>A repurposing studio with brand memory.</h2><p class="lede">An hour of conversation can hold a single minute worth sharing. The editor’s job is to find it, keep the context, and make it sound like the creator.</p><div class="audionote"><div><strong>Listen to the editorial brief</strong><p>George · ElevenLabs narration</p></div><audio controls preload="metadata" src="/static/brief.mp3"></audio></div><h3>How Aftertone answers the brief</h3><ol><li><b>Ingest a recording.</b> Paste a YouTube or direct media link, or upload a video or podcast in English or Hindi.</li><li><b>Compare directions.</b> Review the emotional arc, source lines, vocal dynamics and cut score before choosing.</li><li><b>Adapt the cut.</b> Finalize a running time, then switch platforms for different caption pacing and copy.</li><li><b>Learn the voice.</b> Saved edits influence wording length, casing and hashtag use in future drafts.</li><li><b>Plan publication.</b> Put an approved cut on the calendar or opt in to a connected YouTube upload.</li><li><b>Learn from results.</b> Enter observed retention to adjust the score of similar emotional arcs.</li></ol><a class="outline" href="https://theproductspace.in/agentic-ai-hackathon/problem-statement" target="_blank" rel="noopener">Read the official brief ↗</a></article>';
+    return;
+  }
   if (page === "memory") {
     const metrics = state.metrics;
     $("main").innerHTML =
@@ -197,19 +206,15 @@ function paint() {
   );
   $("main").innerHTML =
     header +
-    '<select id="projects" aria-label="Source recording">' +
-    options +
-    '</select></div><section class="hero"><div class="art"></div><div class="hero-inner"><span class="meta">' +
+    '</div><section class="hero intake"><div class="art"></div><div class="hero-inner"><span class="meta">SOURCE TO SHORTLIST</span><h2>Find your next cut.</h2><p>Bring a recording. Choose a length. Hear the story before you commit.</p><form id="quick"><label for="linkbox">Recording link</label><div class="linkrow"><input id="linkbox" name="link" type="url" placeholder="Paste a YouTube or media link" required><button class="primary">Find directions →</button></div><div class="quicksettings"><label>Length <input type="number" name="seconds" min="30" max="180" value="30" required> s</label><label>Speech <select name="language"><option value="en-IN">English</option><option value="hi-IN">Hindi</option></select></label></div><output id="quickstatus" role="status"></output></form></div></section><section class="sourcebar"><div><small class="tag">' +
     source +
-    "</span><h2>" +
-    esc(project.title) +
-    "</h2><p>" +
-    subtitle +
-    "</p>" +
+    '</small><select id="projects" aria-label="Source recording">' +
+    options +
+    "</select></div>" +
     (project.status === "Ready"
-      ? '<button class="play" id="listen">▶ &nbsp; Play source</button><div id="player"></div>'
+      ? '<button class="outline" id="listen">▶ Play source</button>'
       : "") +
-    '</div></section><div class="listhead"><h2>Selected moments <span>' +
+    '<div id="player"></div></section><div class="listhead"><h2>Editorial directions <span>' +
     project.clips.length +
     '</span></h2><select id="filter" aria-label="Filter emotional arcs">' +
     ["All arcs", ...new Set(project.clips.map((c) => c.arc))]
@@ -232,6 +237,7 @@ function paint() {
           bars(c) +
           '</div></div><div><div class="tag">' +
           esc(c.arc) +
+          (c.final ? " · Finalized" : "") +
           "</div><h3>" +
           esc(c.title) +
           '</h3><div class="info">' +
@@ -253,6 +259,48 @@ function paint() {
     (state.metrics.length
       ? '<div class="actions"><button class="outline" id="rerank">Re-rank using retention</button></div>'
       : "");
+  $("quick").onsubmit = async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget,
+      btn = form.querySelector("button");
+    btn.disabled = true;
+    $("quickstatus").textContent = "Opening recording…";
+    try {
+      const { id } = await api("/api/import", new FormData(form));
+      filter = "All arcs";
+      await refresh(id);
+      document.querySelector(".sourcebar").scrollIntoView({ block: "start" });
+    } catch (error) {
+      $("quickstatus").textContent = error.message;
+    } finally {
+      btn.disabled = false;
+    }
+  };
+  if (project.clips.length) {
+    const toolbar = document.createElement("form");
+    toolbar.className = "durationbar";
+    toolbar.innerHTML =
+      '<label>Cut length <input type="number" aria-label="New cut length" min="30" max="180" value="' +
+      project.seconds +
+      '" required> seconds</label><button class="outline">Update directions</button>';
+    document.querySelector(".listhead").after(toolbar);
+    toolbar.onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = toolbar.querySelector("button");
+      btn.disabled = true;
+      try {
+        await api(url("/rank"), {
+          seconds: Number(toolbar.querySelector("input").value),
+        });
+        filter = "All arcs";
+        await refresh();
+      } catch (e) {
+        message(e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  }
   $("projects").onchange = async (e) => {
     filter = "All arcs";
     await refresh(e.target.value);
@@ -287,7 +335,7 @@ function review(id) {
     stamp(c.start) +
     " — " +
     stamp(c.end) +
-    '</small><h2>Moment review</h2></div><button class="close" aria-label="Close">×</button></div><div class="reviewgrid"><div><video id="preview" controls preload="metadata" poster="/static/cover.jpg"></video><div class="actions"><a id="mp4" class="primary" href="' +
+    '</small><h2>Direction review</h2></div><button class="close" aria-label="Close">×</button></div><div class="reviewgrid"><div><video id="preview" controls preload="metadata" poster="/static/cover.jpg"></video><div class="actions"><a id="mp4" class="primary" href="' +
     cuturl("/export/mp4?download=1") +
     '">↓ MP4</a><a id="srt" class="outline" href="' +
     cuturl("/export/srt") +
@@ -319,6 +367,18 @@ function review(id) {
       )
       .join("") +
     '</div><label for="copy">Platform copy</label><textarea id="copy" maxlength="2000"></textarea><button class="outline" id="save">Save voice edit</button><details><summary>Plan publication</summary><label>Local date and time<input id="when" type="datetime-local"></label><div id="publishopts"></div><button class="primary" id="schedule">Add to calendar</button></details><details><summary>Record performance</summary><label>Average percentage viewed<input type="number" id="retention" min="0" max="100" placeholder="e.g. 72"></label><button class="outline" id="learn">Save retention</button></details><p class="notice" role="status"></p></div></div>';
+  const approval = document.createElement("button");
+  approval.id = "finalize";
+  approval.className = "primary";
+  approval.textContent = "Finalize this direction →";
+  $("mp4").parentElement.before(approval);
+  bind("finalize", async () => {
+    await api(cuturl("/finalize"), {});
+    current.final = true;
+    choosePlatform();
+    await refresh();
+    message("Direction finalized. Your captioned export is ready to preview.");
+  });
   choosePlatform();
   bind("save", async () => {
     await api(cuturl("/edit"), { platform, copy: $("copy").value });
@@ -349,7 +409,22 @@ function review(id) {
 }
 function choosePlatform() {
   const media = cuturl("/export/mp4?platform=" + encodeURIComponent(platform));
-  $("preview").src = media;
+  const preview = $("preview");
+  const source = url("/source") + "#t=" + current.start + "," + current.end;
+  preview.ontimeupdate = current.final
+    ? null
+    : () => {
+        if (preview.currentTime >= current.end) {
+          preview.pause();
+          preview.currentTime = current.start;
+        }
+      };
+  const src = current.final ? media : source;
+  if (preview.getAttribute("src") !== src) preview.src = src;
+  $("finalize").hidden = current.final;
+  $("mp4").parentElement.hidden = !current.final;
+  $("schedule").disabled = !current.final;
+  $("schedule").title = current.final ? "" : "Finalize this direction first";
   $("mp4").href = media + "&download=1";
   $("srt").href = cuturl(
     "/export/srt?platform=" + encodeURIComponent(platform),

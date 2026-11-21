@@ -54,33 +54,39 @@ def parse_srt(raw):
 
 
 def rank(rows, feedback, levels=(), target=30, source_duration=None):
-    duration_available=source_duration if source_duration is not None else rows[-1][1]
-    if duration_available<target:
-        raise ValueError(f"This recording is {duration_available:.1f}s. Choose a recording at least {target}s long.")
-    starts=[r[0] for r in rows]
+    duration_available = source_duration if source_duration is not None else rows[-1][1]
+    if duration_available < target:
+        raise ValueError(
+            f"This recording is {duration_available:.1f}s. Choose a recording at least {target}s long."
+        )
+    starts = [r[0] for r in rows]
     # Median voiced RMS keeps long quiet tails from dominating the delivery signal.
     loudness = []
     for a, b, _ in rows:
         voiced = sorted(v for v in levels[int(a * 5) : int(b * 5) + 1] if v > -55)
         loudness.append(voiced[len(voiced) // 2] if voiced else None)
     candidates = []
-    for i,(cue_start,_,_) in enumerate(rows):
-        start=min(cue_start,duration_available-target)
-        if i and start<=rows[i-1][0]: break
-        end=start+target
-        j=bisect_left(starts,end)-1
-        if j<i: continue
-        window=[]
-        for a,b,text in rows[i:j+1]:
-            left,right=max(start,a),min(end,b)
-            if right<=left: continue
-            words=text.split()
-            first=int(len(words)*(left-a)/(b-a))
-            last=max(first+1,round(len(words)*(right-a)/(b-a)))
-            window.append([left,right," ".join(words[first:last])])
-        if not window: continue
-        duration=target
-        lines=[r[2] for r in window]
+    for i, (cue_start, _, _) in enumerate(rows):
+        start = min(cue_start, duration_available - target)
+        if i and start <= rows[i - 1][0]:
+            break
+        end = start + target
+        j = bisect_left(starts, end) - 1
+        if j < i:
+            continue
+        window = []
+        for a, b, text in rows[i : j + 1]:
+            left, right = max(start, a), min(end, b)
+            if right <= left:
+                continue
+            words = text.split()
+            first = int(len(words) * (left - a) / (b - a))
+            last = max(first + 1, round(len(words) * (right - a) / (b - a)))
+            window.append([left, right, " ".join(words[first:last])])
+        if not window:
+            continue
+        duration = target
+        lines = [r[2] for r in window]
         whole = " ".join(lines)
         curve = [sentiment(t) for t in lines]
         swing = max(curve) - min(curve)
@@ -119,7 +125,7 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
             + 6 * detail
             + 7 * bool(payoff)
             + 4 * bool(hits(lines[0], "Curiosity") or hits(lines[0], "Tension"))
-            - max(0,duration-sum(b-a for a,b,_ in window))*.65
+            - max(0, duration - sum(b - a for a, b, _ in window)) * 0.65
             - 18 * len(FILLER.findall(whole))
             + min(4, dynamics * 0.35)
             + 3 * clean_end
@@ -139,9 +145,7 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
         if change:
             reasons.append("The speaker signals a change in understanding.")
         if detail:
-            reasons.append(
-                "A concrete number or causal explanation grounds the story."
-            )
+            reasons.append("A concrete number or causal explanation grounds the story.")
         if payoff:
             reasons.append("The last line resolves or reframes the opening.")
         if outcomes:
@@ -161,9 +165,7 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
         title = max(
             clauses or lines,
             key=lambda t: (
-                hits(t, "Discovery") * 2
-                + abs(sentiment(t))
-                + bool(re.search(r"\d", t))
+                hits(t, "Discovery") * 2 + abs(sentiment(t)) + bool(re.search(r"\d", t))
             ),
         )
         candidates.append(
@@ -200,7 +202,10 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
         )
     selected = []
     for c in sorted(candidates, key=lambda c: -c["score"]):
-        if all(min(c["end"],s["end"])-max(c["start"],s["start"])<=target*.3 for s in selected):
+        if all(
+            min(c["end"], s["end"]) - max(c["start"], s["start"]) <= target * 0.3
+            for s in selected
+        ):
             selected.append(c)
         if len(selected) == 8:
             break

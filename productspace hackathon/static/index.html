@@ -17,6 +17,7 @@
         <button data-page="studio" class="active"><i>◫</i> Clip studio</button
         ><button data-page="calendar"><i>▦</i> Content calendar</button
         ><button data-page="memory"><i>≋</i> Brand memory</button>
+        <button data-page="brief"><i>◧</i> Project brief</button>
       </nav>
       <div class="foot">
         <a href="/download">↓ &nbsp; Download studio</a
@@ -31,7 +32,7 @@
           href="/download"
           aria-label="Download studio"
           >↓ Studio</a
-        ><button class="primary" id="new">＋ Import source</button>
+        ><button class="primary" id="new">↑ Upload recording</button>
       </header>
       <main id="main" aria-live="polite">Opening studio…</main>
     </div>
@@ -53,6 +54,15 @@
             type="file"
             accept=".srt"
         /></label>
+        <label
+          >Clip length in seconds<input
+            type="number"
+            name="seconds"
+            min="30"
+            max="180"
+            value="30"
+            required
+        /></label>
         <p id="service"></p>
         <label class="checkbox" id="cloudoption"
           ><input type="checkbox" name="sarvam" /> Use Sarvam for transcription
@@ -64,7 +74,7 @@
             <option value="hi-IN">Hindi / Hinglish</option>
             <option value="en-IN">English</option>
           </select></label
-        ><button class="primary">Find moments →</button>
+        ><button class="primary">Find directions →</button>
       </form>
     </dialog>
     <dialog id="review"><div id="reviewbody"></div></dialog>

@@ -129,19 +129,23 @@ def memories(who):
 
 
 def length(value):
-    try: seconds=int(str(value))
-    except (ValueError,TypeError): raise ValueError("Enter a whole number of seconds from 30 to 180.")
-    if not 30<=seconds<=180: raise ValueError("Choose a clip length from 30 to 180 seconds.")
+    try:
+        seconds = int(str(value))
+    except (ValueError, TypeError):
+        raise ValueError("Enter a whole number of seconds from 30 to 180.")
+    if not 30 <= seconds <= 180:
+        raise ValueError("Choose a clip length from 30 to 180 seconds.")
     return seconds
 
-def rank_recording(pid, source, rows, metrics,target=30):
+
+def rank_recording(pid, source, rows, metrics, target=30):
     cache = DATA / pid / "levels.json"
     if cache.exists():
         levels = json.loads(cache.read_text())
     else:
         levels = source_levels(source)
         cache.write_text(json.dumps(levels))
-    return rank(rows, metrics, levels,target,probe(source)[0])
+    return rank(rows, metrics, levels, target, probe(source)[0])
 
 
 def insert(who, title, source, rows=None):
@@ -241,13 +245,16 @@ def ingest():
         return jsonify(error="The studio has reached its upload storage budget."), 507
     media = request.files.get("media")
     srt = request.files.get("srt")
-    link=request.form.get("link","").strip()
-    target=length(request.form.get("seconds",30))
-    if link and media: raise ValueError("Choose one source.")
+    link = request.form.get("link", "").strip()
+    target = length(request.form.get("seconds", 30))
+    if link and media:
+        raise ValueError("Choose one source.")
     if link:
         checked(link)
-        if used+512*1024**2>limit: raise ValueError("The studio has reached its link import budget.")
-    elif not media or not media.filename: raise ValueError("Paste a source link or choose a recording.")
+        if used + 512 * 1024**2 > limit:
+            raise ValueError("The studio has reached its link import budget.")
+    elif not media or not media.filename:
+        raise ValueError("Paste a source link or choose a recording.")
 
     rows = (
         parse_srt(srt.read(4_000_000).decode("utf-8-sig"))
@@ -259,9 +266,12 @@ def ingest():
     if not slots.acquire(blocking=False):
         return jsonify(error="The import queue is full. Try again shortly."), 429
     try:
-        pid = insert(who, "Linked recording" if link else Path(media.filename).stem[:150], "")
+        pid = insert(
+            who, "Linked recording" if link else Path(media.filename).stem[:150], ""
+        )
         src = DATA / pid / "source"
-        if media: media.save(src)
+        if media:
+            media.save(src)
         lang = request.form.get("language", "unknown")
         if lang not in ("unknown", "hi-IN", "en-IN"):
             lang = "unknown"
@@ -273,7 +283,8 @@ def ingest():
             rows,
             lang,
             request.form.get("sarvam") == "on" and bool(os.getenv("SARVAM_API_KEY")),
-            link,target,
+            link,
+            target,
         )
     except Exception:
         slots.release()
@@ -289,10 +300,14 @@ def process(pid, who, src, rows, lang, cloud, link, target):
     try:
         if link:
             progress("Fetching linked recording")
-            title=fetch(link,src)
-            with db() as c: c.execute("UPDATE projects SET title=? WHERE id=?",(title,pid))
+            title = fetch(link, src)
+            with db() as c:
+                c.execute("UPDATE projects SET title=? WHERE id=?", (title, pid))
         duration, _ = probe(src)
-        if duration<target: raise ValueError(f"The source is {duration:.1f}s. Choose a source at least {target}s long.")
+        if duration < target:
+            raise ValueError(
+                f"The source is {duration:.1f}s. Choose a source at least {target}s long."
+            )
         if duration > 3 * 3600:
             raise ValueError("Import a recording under three hours.")
         if rows is None:
@@ -305,7 +320,7 @@ def process(pid, who, src, rows, lang, cloud, link, target):
             raise ValueError("Caption timestamps fall outside the recording.")
         progress("Finding emotional arcs")
         edits, metrics = memories(who)
-        clips = rank_recording(pid, src, rows, metrics,target)
+        clips = rank_recording(pid, src, rows, metrics, target)
         if cloud:
             clips = refine(clips, edits)
         with db() as c:
@@ -314,7 +329,8 @@ def process(pid, who, src, rows, lang, cloud, link, target):
                 (str(src), json.dumps(clips), json.dumps(rows), pid),
             )
     except Exception as e:
-        if link: src.unlink(missing_ok=True)
+        if link:
+            src.unlink(missing_ok=True)
         progress(
             str(e)[:180]
             if isinstance(e, ValueError)
@@ -329,17 +345,28 @@ def detail(pid):
     who = owner()
     p = project(pid, who)
     clips = json.loads(p["clips"] or "[]")
-    if clips and clips[0]["id"].count("-")==1:
+    if clips and clips[0]["id"].count("-") == 1:
         try:
-            clips=rank_recording(pid,p["source"],json.loads(p["rows"]),memories(who)[1])
-            replace_cuts(p,clips)
+            clips = rank_recording(
+                pid, p["source"], json.loads(p["rows"]), memories(who)[1]
+            )
+            replace_cuts(p, clips)
         except ValueError as error:
-            return jsonify(id=pid,title=p["title"],status=str(error),clips=[],demo=False,seconds=30)
+            return jsonify(
+                id=pid,
+                title=p["title"],
+                status=str(error),
+                clips=[],
+                demo=False,
+                seconds=30,
+            )
     with db() as con:
-        finals={r[0] for r in con.execute("SELECT clip FROM finals WHERE project=?",(pid,))}
+        finals = {
+            r[0] for r in con.execute("SELECT clip FROM finals WHERE project=?", (pid,))
+        }
     edits, _ = memories(who)
     for clip in clips:
-        clip["final"]=clip["id"] in finals
+        clip["final"] = clip["id"] in finals
         clip["copy"] = {
             plat: next(
                 (
@@ -357,7 +384,7 @@ def detail(pid):
         title=p["title"],
         status=p["status"],
         clips=clips,
-        seconds=round(clips[0]["end"]-clips[0]["start"]) if clips else 30,
+        seconds=round(clips[0]["end"] - clips[0]["start"]) if clips else 30,
         demo=p["source"] == str(ROOT / "static/demo.mp3"),
     )
 
@@ -408,14 +435,21 @@ def rerank(pid):
     p = project(pid, who)
     if not p["clips"]:
         raise ValueError("Wait for the import to finish.")
-    prior=json.loads(p["clips"])[0]
-    target=length((request.get_json(silent=True) or {}).get("seconds",max(30,round(prior["end"]-prior["start"]))))
-    clips = rank_recording(pid, p["source"], json.loads(p["rows"]), memories(who)[1],target)
-    replace_cuts(p,clips)
+    prior = json.loads(p["clips"])[0]
+    target = length(
+        (request.get_json(silent=True) or {}).get(
+            "seconds", max(30, round(prior["end"] - prior["start"]))
+        )
+    )
+    clips = rank_recording(
+        pid, p["source"], json.loads(p["rows"]), memories(who)[1], target
+    )
+    replace_cuts(p, clips)
     return jsonify(ok=True)
 
-def replace_cuts(p,clips):
-    pid=p["id"]
+
+def replace_cuts(p, clips):
+    pid = p["id"]
     # Keep older cuts addressable for scheduled exports, even when rankings change.
     with db() as c:
         for clip in json.loads(p["clips"]):
@@ -423,23 +457,29 @@ def replace_cuts(p,clips):
         c.execute("UPDATE projects SET clips=? WHERE id=?", (json.dumps(clips), pid))
 
 
-
 @app.post("/api/projects/<pid>/<cid>/finalize")
-def finalize(pid,cid):
-    cut=clip_of(project(pid,owner()),cid)
-    if round(cut["end"]-cut["start"],4)<30: raise ValueError("Refresh the direction list first.")
-    with db() as c: c.execute("INSERT OR IGNORE INTO finals VALUES(?,?)",(pid,cid))
+def finalize(pid, cid):
+    cut = clip_of(project(pid, owner()), cid)
+    if round(cut["end"] - cut["start"], 4) < 30:
+        raise ValueError("Refresh the direction list first.")
+    with db() as c:
+        c.execute("INSERT OR IGNORE INTO finals VALUES(?,?)", (pid, cid))
     return jsonify(ok=True)
 
-def require_final(pid,cid):
+
+def require_final(pid, cid):
     with db() as c:
-        if not c.execute("SELECT 1 FROM finals WHERE project=? AND clip=?",(pid,cid)).fetchone(): raise ValueError("Finalize this direction first.")
+        if not c.execute(
+            "SELECT 1 FROM finals WHERE project=? AND clip=?", (pid, cid)
+        ).fetchone():
+            raise ValueError("Finalize this direction first.")
+
 
 @app.get("/api/projects/<pid>/<cid>/export/<kind>")
 def export(pid, cid, kind):
     p = project(pid, owner())
     clip = clip_of(p, cid)
-    require_final(pid,cid)
+    require_final(pid, cid)
     platform = request.args.get("platform", "YouTube")
     if platform not in PLATFORMS:
         abort(400)
@@ -547,7 +587,7 @@ def callback():
 def schedule(pid, cid):
     who = owner()
     clip_of(project(pid, who), cid)
-    require_final(pid,cid)
+    require_final(pid, cid)
     d = request.json
     at = float(d["at"])
     if (
