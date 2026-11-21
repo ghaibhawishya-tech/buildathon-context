@@ -302,9 +302,13 @@ function paint() {
     )
     .join("");
   const source = project.demo ? "ORIGINAL DEMO PODCAST" : "IMPORTED SOURCE";
-  const cards = project.clips.filter(
-    (c) => filter === "All arcs" || filter === c.arc,
-  );
+  const saved = project.saved || [];
+  const cards =
+    filter === "Saved clips"
+      ? saved
+      : project.clips.filter(
+          (clip) => filter === "All arcs" || filter === clip.arc,
+        );
   $("main").innerHTML =
     `${studioCover()}<section id="clip-request" class="request-section" aria-labelledby="request-title">
       <div class="request-intro"><h2 id="request-title">What are we cutting?</h2><p>Send a YouTube link or a direct audio or video URL. Pick a duration and we’ll suggest passages that fit.</p>
@@ -316,7 +320,16 @@ function paint() {
           <div class="quicksettings"><label>Length <input type="number" name="seconds" min="30" max="180" value="30" required> sec</label>
           <label>Language <select name="language"><option value="en-IN">English</option><option value="hi-IN">Hindi</option></select></label></div>
           <button class="primary composer-send">Find clips <span aria-hidden="true">↑</span></button>
-        </div><output id="quickstatus" role="status"></output>
+        </div>
+        <details class="composer-option"><summary>Analyze a section of a long YouTube video</summary>
+          <p>Enter a start time to fetch just that section. The timeline starts at zero for the selected section.</p>
+          <div class="quicksettings"><label>Start <input class="window-start" name="window_start" placeholder="12:30:00" aria-label="Section start time"></label><label>Analyze <input type="number" name="window_minutes" min="3" max="15" value="10"> min</label></div>
+        </details>
+        <details class="composer-option"><summary>Sarvam AI for transcription and ranking</summary>
+          ${state.sarvam ? '<label class="checkbox"><input type="checkbox" name="sarvam"> Use Sarvam for this import</label>' : "<p>Set SARVAM_API_KEY in the server’s .env file and restart to enable Sarvam.</p>"}
+          <p>Sarvam turns speech into timed text, then reviews the strongest candidates and drafts platform copy. Audio and relevant transcript text are sent to Sarvam when enabled.</p>
+        </details>
+        <output id="quickstatus" role="status"></output>
       </form>
     </section>${workflow()}<section id="edit-desk" class="sourcebar"><div><small class="tag">` +
     source +
@@ -329,7 +342,11 @@ function paint() {
     '<div id="player"></div></section><div class="listhead"><h2>Suggested clips <span>' +
     cards.length +
     '</span></h2><select id="filter" aria-label="Filter by story type">' +
-    ["All arcs", ...new Set(project.clips.map((c) => c.arc))]
+    [
+      "All arcs",
+      ...new Set(project.clips.map((c) => c.arc)),
+      ...(saved.length ? ["Saved clips"] : []),
+    ]
       .map(
         (x) =>
           "<option " +
@@ -339,7 +356,7 @@ function paint() {
           "</option>",
       )
       .join("") +
-    '</select></div><p class="desk-help">Each bar marks where a suggested clip begins and ends in the recording. Open a clip to listen and see why it was picked. The score ranks the suggestions by story and delivery.</p><div class="cards">' +
+    '</select></div><p class="desk-help">Each bar marks where a suggested clip begins and ends in the recording. Open a clip to listen and see why it was picked. Aftertone suggests up to five clips per run. Approve the clips you want to keep, then find them under Saved clips.</p><div class="cards">' +
     (cards
       .map(
         (c, i) =>
@@ -351,7 +368,7 @@ function paint() {
           bars(c) +
           '</div></div><div><div class="tag">' +
           esc(c.arc) +
-          (c.final ? " · Finalized" : "") +
+          (c.final ? " · Saved" : "") +
           "</div><h3>" +
           esc(c.title) +
           '</h3><div class="info">' +
@@ -489,7 +506,9 @@ function paint() {
   });
 }
 function review(id) {
-  current = project.clips.find((c) => c.id === id);
+  current = [...project.clips, ...(project.saved || [])].find(
+    (c) => c.id === id,
+  );
   platform = "YouTube";
   const c = current;
   $("reviewbody").innerHTML =
@@ -631,7 +650,9 @@ function review(id) {
         650,
       );
     await refresh();
-    message("Clip approved. Preview or download the captioned export.");
+    message(
+      "Clip saved. Preview or download it now, or find it later under Saved clips.",
+    );
   });
   const audioGuide = document.createElement("details");
   audioGuide.className = "audio-guide";

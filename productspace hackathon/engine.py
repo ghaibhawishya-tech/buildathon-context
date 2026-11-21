@@ -215,7 +215,7 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
             for s in selected
         ):
             selected.append(c)
-        if len(selected) == 8:
+        if len(selected) == 5:
             break
     if not selected and rows:
         raise ValueError(

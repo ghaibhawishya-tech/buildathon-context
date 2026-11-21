@@ -75,7 +75,7 @@ def youtube_failure(details):
             "live stream is offline",
         )
     ):
-        return "Choose a finished YouTube recording no longer than three hours."
+        return "Choose a completed recording. For YouTube videos longer than three hours, use Analyze a section."
     if any(
         phrase in details
         for phrase in (
@@ -103,7 +103,7 @@ def youtube_failure(details):
     return "The YouTube download failed. Try another public video or upload your copy."
 
 
-def fetch_youtube(video, path):
+def fetch_youtube(video, path, window=None):
     with tempfile.TemporaryDirectory(dir=path.parent) as work:
         root = Path(work).resolve()
         encoder = root / ("ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
@@ -113,6 +113,15 @@ def fetch_youtube(video, path):
             shutil.copy2(FF, encoder)
         receipt = root / "download.json"
         runtime = ["--js-runtimes", "node"] if shutil.which("node") else []
+        selection = (
+            ["--download-sections", f"*{window[0]}-{window[1]}"] if window else []
+        )
+        combined = "best[height<=720][protocol=https]"
+        separate = "bestvideo[height<=720][ext=mp4][protocol=https]+bestaudio[ext=m4a][protocol=https]"
+        fallback = "bestvideo[height<=720][protocol=https]+bestaudio[protocol=https]"
+        formats = (
+            [combined, separate, fallback] if window else [separate, combined, fallback]
+        )
         command = [
             sys.executable,
             "-m",
@@ -126,7 +135,8 @@ def fetch_youtube(video, path):
             "--max-filesize",
             str(MAX_BYTES),
             "--match-filters",
-            "duration <= 10800 & !is_live",
+            "!is_live" if window else "duration <= 10800 & !is_live",
+            *selection,
             "--socket-timeout",
             "20",
             "--retries",
@@ -137,9 +147,9 @@ def fetch_youtube(video, path):
             "--merge-output-format",
             "mp4",
             "-S",
-            "res:480",
+            "res:360" if window else "res:480",
             "-f",
-            "bestvideo[height<=720][ext=mp4][protocol=https]+bestaudio[ext=m4a][protocol=https]/best[height<=720][protocol=https]/bestvideo[height<=720][protocol=https]+bestaudio[protocol=https]",
+            "/".join(formats),
             "-o",
             str(root / "recording.%(ext)s"),
             "--print-to-file",
@@ -164,14 +174,21 @@ def fetch_youtube(video, path):
         if downloaded.stat().st_size > MAX_BYTES:
             raise ValueError(youtube_failure("max-filesize"))
         downloaded.replace(path)
-        return str(info["title"])[:150]
+        title = str(info["title"])
+        if window:
+            start = window[0]
+            offset = f"{start // 3600:02}:{start // 60 % 60:02}:{start % 60:02}"
+            return f"{title[:110]} · Section from {offset}"
+        return title[:150]
 
 
-def fetch(url, path):
+def fetch(url, path, window=None):
     checked(url)
     video = youtube_id(url)
     if video:
-        return fetch_youtube(video, path)
+        return fetch_youtube(video, path, window)
+    if window:
+        raise ValueError("A timed section requires a YouTube video link.")
     deadline = time.monotonic() + 240
     for _ in range(6):
         parsed = checked(url)

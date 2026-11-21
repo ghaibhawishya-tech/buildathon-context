@@ -345,3 +345,21 @@ html {
     top: 0;
   }
 }
+.composer-option {
+  border-color: #ffffff32;
+}
+.composer-option summary {
+  color: #f2c5af;
+}
+.composer-option p {
+  color: #e8d9cd;
+  font-size: 13px;
+  max-width: 62ch;
+  margin-block: 8px;
+}
+.composer-option .quicksettings {
+  flex-wrap: wrap;
+}
+.composer .quicksettings .window-start {
+  width: 96px;
+}

@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 import secrets
 import sqlite3
 import shutil
@@ -18,7 +19,7 @@ from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, redirect, request, send_file, session
 
 from narration import narrated
-from sources import fetch, checked
+from sources import fetch, checked, youtube_id
 from editor import refine
 from speech import local_transcribe
 from engine import parse_srt, platform_copy, rank
@@ -108,7 +109,19 @@ def project(pid, who):
 
 def clip_of(p, cid):
     clips = json.loads(p["clips"] or "[]")
-    return next((x for x in clips if x["id"] == cid), None) or abort(404)
+    clip = next((x for x in clips if x["id"] == cid), None)
+    if clip:
+        return clip
+    if re.fullmatch(r"[0-9]+(?:-[0-9]+){1,3}", cid):
+        with db() as con:
+            saved = con.execute(
+                "SELECT 1 FROM finals WHERE project=? AND clip=?", (p["id"], cid)
+            ).fetchone()
+        if saved:
+            archived = DATA / p["id"] / (cid + ".json")
+            if archived.is_file():
+                return json.loads(archived.read_text())
+    abort(404)
 
 
 def memories(who):
@@ -241,6 +254,21 @@ def demo():
     return jsonify(id=pid)
 
 
+def import_window(link, start, minutes):
+    if not start:
+        return None
+    if not youtube_id(link):
+        raise ValueError("A timed section requires a YouTube video link.")
+    if not re.fullmatch(r"(?:[0-9]{1,3}:)?[0-5]?[0-9]:[0-5][0-9]", start):
+        raise ValueError("Use HH:MM:SS or MM:SS for the section start.")
+    if not re.fullmatch(r"[0-9]{1,2}", minutes) or not 3 <= int(minutes) <= 15:
+        raise ValueError("Choose a section length of 3 to 15 minutes.")
+    seconds = sum(
+        int(part) * 60**i for i, part in enumerate(reversed(start.split(":")))
+    )
+    return seconds, seconds + int(minutes) * 60
+
+
 @app.post("/api/import")
 def ingest():
     who = owner()
@@ -263,11 +291,21 @@ def ingest():
     elif not media or not media.filename:
         raise ValueError("Paste a source link or choose a recording.")
 
+    window = import_window(
+        link,
+        request.form.get("window_start", "").strip(),
+        request.form.get("window_minutes", "10"),
+    )
     rows = (
         parse_srt(srt.read(4_000_000).decode("utf-8-sig"))
         if srt and srt.filename
         else None
     )
+    cloud = request.form.get("sarvam") == "on"
+    if cloud and not os.getenv("SARVAM_API_KEY"):
+        raise ValueError(
+            "Set SARVAM_API_KEY in the studio’s .env file and restart to enable Sarvam."
+        )
     if rows and len(rows) > 12000:
         raise ValueError("Import up to 12,000 subtitle cues at once.")
     if not slots.acquire(blocking=False):
@@ -289,9 +327,10 @@ def ingest():
             src,
             rows,
             lang,
-            request.form.get("sarvam") == "on" and bool(os.getenv("SARVAM_API_KEY")),
+            cloud,
             link,
             target,
+            window,
         )
     except Exception:
         slots.release()
@@ -299,7 +338,7 @@ def ingest():
     return jsonify(id=pid), 202
 
 
-def process(pid, who, src, rows, lang, cloud, link, target):
+def process(pid, who, src, rows, lang, cloud, link, target, window=None):
     def progress(s):
         with db() as c:
             c.execute("UPDATE projects SET status=? WHERE id=?", (s, pid))
@@ -307,13 +346,17 @@ def process(pid, who, src, rows, lang, cloud, link, target):
     try:
         if link:
             progress("Fetching linked recording")
-            title = fetch(link, src)
+            title = fetch(link, src, window)
             with db() as c:
                 c.execute("UPDATE projects SET title=? WHERE id=?", (title, pid))
         duration, _ = probe(src)
         if duration < target:
             raise ValueError(
                 f"The source is {duration:.1f}s. Choose a source at least {target}s long."
+            )
+        if window and duration > window[1] - window[0] + 10:
+            raise ValueError(
+                "YouTube did not deliver the requested section. Try a different timestamp or recording."
             )
         if duration > 3 * 3600:
             raise ValueError("Import a recording under three hours.")
@@ -372,7 +415,12 @@ def detail(pid):
             r[0] for r in con.execute("SELECT clip FROM finals WHERE project=?", (pid,))
         }
     edits, _ = memories(who)
-    for clip in clips:
+    saved_clips = [clip for clip in clips if clip["id"] in finals]
+    for cid in sorted(finals - {clip["id"] for clip in clips}):
+        archived = DATA / pid / (cid + ".json")
+        if archived.is_file() and re.fullmatch(r"[0-9]+(?:-[0-9]+){1,3}", cid):
+            saved_clips.append(json.loads(archived.read_text()))
+    for clip in [*clips, *saved_clips]:
         clip["final"] = clip["id"] in finals
         clip["copy"] = {
             plat: next(
@@ -391,6 +439,7 @@ def detail(pid):
         title=p["title"],
         status=p["status"],
         clips=clips,
+        saved=saved_clips,
         seconds=round(clips[0]["end"] - clips[0]["start"]) if clips else 30,
         demo=p["source"] == str(ROOT / "static/demo.mp3"),
     )
@@ -460,7 +509,10 @@ def replace_cuts(p, clips):
     # Keep older cuts addressable for scheduled exports, even when rankings change.
     with db() as c:
         for clip in json.loads(p["clips"]):
-            (DATA / pid / (clip["id"] + ".json")).write_text(json.dumps(clip))
+            path = DATA / pid / (clip["id"] + ".json")
+            pending = path.with_suffix("." + uid() + ".tmp")
+            pending.write_text(json.dumps(clip))
+            pending.replace(path)
         c.execute("UPDATE projects SET clips=? WHERE id=?", (json.dumps(clips), pid))
 
 
