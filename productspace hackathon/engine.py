@@ -1,3 +1,4 @@
+from bisect import bisect_left
 from functools import lru_cache
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
@@ -52,147 +53,154 @@ def parse_srt(raw):
     return sorted(rows)
 
 
-def rank(rows, feedback, levels=()):
+def rank(rows, feedback, levels=(), target=30, source_duration=None):
+    duration_available=source_duration if source_duration is not None else rows[-1][1]
+    if duration_available<target:
+        raise ValueError(f"This recording is {duration_available:.1f}s. Choose a recording at least {target}s long.")
+    starts=[r[0] for r in rows]
     # Median voiced RMS keeps long quiet tails from dominating the delivery signal.
     loudness = []
     for a, b, _ in rows:
         voiced = sorted(v for v in levels[int(a * 5) : int(b * 5) + 1] if v > -55)
         loudness.append(voiced[len(voiced) // 2] if voiced else None)
     candidates = []
-    for i, (start, _, _) in enumerate(rows):
-        best = None
-        for j in range(i, min(len(rows), i + 90)):
-            window = rows[i : j + 1]
-            duration = window[-1][1] - start
-            if duration > 62 or (j > i and rows[j][0] - rows[j - 1][1] > 3):
-                break
-            if duration < min(14, rows[-1][1] - rows[0][0]):
-                continue
-            lines = [r[2] for r in window]
-            whole = " ".join(lines)
-            curve = [sentiment(t) for t in lines]
-            swing = max(curve) - min(curve)
-            change = hits(whole, "Discovery")
-            arc = (
-                "Reversal"
-                if swing >= 2
-                else "Realization"
-                if change
-                else "Question"
-                if hits(whole, "Curiosity")
-                else "Reflection"
+    for i,(cue_start,_,_) in enumerate(rows):
+        start=min(cue_start,duration_available-target)
+        if i and start<=rows[i-1][0]: break
+        end=start+target
+        j=bisect_left(starts,end)-1
+        if j<i: continue
+        window=[]
+        for a,b,text in rows[i:j+1]:
+            left,right=max(start,a),min(end,b)
+            if right<=left: continue
+            words=text.split()
+            first=int(len(words)*(left-a)/(b-a))
+            last=max(first+1,round(len(words)*(right-a)/(b-a)))
+            window.append([left,right," ".join(words[first:last])])
+        if not window: continue
+        duration=target
+        lines=[r[2] for r in window]
+        whole = " ".join(lines)
+        curve = [sentiment(t) for t in lines]
+        swing = max(curve) - min(curve)
+        change = hits(whole, "Discovery")
+        arc = (
+            "Reversal"
+            if swing >= 2
+            else "Realization"
+            if change
+            else "Question"
+            if hits(whole, "Curiosity")
+            else "Reflection"
+        )
+        outcomes = [v["retention"] for v in feedback.values() if v["arc"] == arc]
+        adjustment = sum(v - 50 for v in outcomes) / (len(outcomes) + 2) * 0.32
+        detail = bool(re.search(r"\d|because|because of|क्योंकि|इसलिए", whole, re.I))
+        payoff = curve[-1] > curve[0] or hits(lines[-1], "Discovery")
+        spoken = [v for v in loudness[i : j + 1] if v is not None]
+        dynamics = max(spoken) - min(spoken) if spoken else 0
+        unfinished = bool(
+            re.search(
+                r"(?:^|\s)(?:the|and|because|to|my|of|a|कि|और|लेकिन)$",
+                lines[-1],
+                re.I,
             )
-            outcomes = [v["retention"] for v in feedback.values() if v["arc"] == arc]
-            adjustment = sum(v - 50 for v in outcomes) / (len(outcomes) + 2) * 0.32
-            detail = bool(re.search(r"\d|because|because of|क्योंकि|इसलिए", whole, re.I))
-            payoff = curve[-1] > curve[0] or hits(lines[-1], "Discovery")
-            spoken = [v for v in loudness[i : j + 1] if v is not None]
-            dynamics = max(spoken) - min(spoken) if spoken else 0
-            unfinished = bool(
-                re.search(
-                    r"(?:^|\s)(?:the|and|because|to|my|of|a|कि|और|लेकिन)$",
-                    lines[-1],
-                    re.I,
-                )
+        )
+        clean_end = (
+            j + 1 == len(rows)
+            or rows[j + 1][0] - rows[j][1] > 0.32
+            or bool(re.search(r"[.!?।]$", lines[-1]))
+        )
+        score = (
+            50
+            + min(swing, 3) * 6
+            + min(change, 2) * 3
+            + 6 * detail
+            + 7 * bool(payoff)
+            + 4 * bool(hits(lines[0], "Curiosity") or hits(lines[0], "Tension"))
+            - max(0,duration-sum(b-a for a,b,_ in window))*.65
+            - 18 * len(FILLER.findall(whole))
+            + min(4, dynamics * 0.35)
+            + 3 * clean_end
+            - 13 * unfinished
+            + adjustment
+        )
+
+        reasons = []
+        if swing:
+            low = lines[curve.index(min(curve))].split(". ")[0][:120]
+            high = lines[curve.index(max(curve))].split(". ")[0][:120]
+            reasons.append(f"Emotional low: “{low}”. Emotional high: “{high}”.")
+        if dynamics >= 4:
+            reasons.append(
+                f"Typical voice level varies by {dynamics:.0f} dB across these lines, adding a change in delivery."
             )
-            clean_end = (
-                j + 1 == len(rows)
-                or rows[j + 1][0] - rows[j][1] > 0.32
-                or bool(re.search(r"[.!?।]$", lines[-1]))
+        if change:
+            reasons.append("The speaker signals a change in understanding.")
+        if detail:
+            reasons.append(
+                "A concrete number or causal explanation grounds the story."
             )
-            score = (
-                50
-                + min(swing, 3) * 6
-                + min(change, 2) * 3
-                + 6 * detail
-                + 7 * bool(payoff)
-                + 4 * bool(hits(lines[0], "Curiosity") or hits(lines[0], "Tension"))
-                - abs(30 - duration) * 0.22
-                - 18 * len(FILLER.findall(whole))
-                + min(4, dynamics * 0.35)
-                + 3 * clean_end
-                - 13 * unfinished
-                + adjustment
+        if payoff:
+            reasons.append("The last line resolves or reframes the opening.")
+        if outcomes:
+            reasons.append(
+                f"Recorded retention for {arc.lower()} cuts adjusted this score by {adjustment:+.1f}."
             )
-            if best is not None and score <= best[0]:
-                continue
-            reasons = []
-            if swing:
-                low = lines[curve.index(min(curve))].split(". ")[0][:120]
-                high = lines[curve.index(max(curve))].split(". ")[0][:120]
-                reasons.append(f"Emotional low: “{low}”. Emotional high: “{high}”.")
-            if dynamics >= 4:
-                reasons.append(
-                    f"Typical voice level varies by {dynamics:.0f} dB across these lines, adding a change in delivery."
-                )
-            if change:
-                reasons.append("The speaker signals a change in understanding.")
-            if detail:
-                reasons.append(
-                    "A concrete number or causal explanation grounds the story."
-                )
-            if payoff:
-                reasons.append("The last line resolves or reframes the opening.")
-            if outcomes:
-                reasons.append(
-                    f"Recorded retention for {arc.lower()} cuts adjusted this score by {adjustment:+.1f}."
-                )
-            if not reasons:
-                reasons.append("A continuous thought fits the target editorial length.")
-            clauses = [
-                phrase.strip()
-                for line in lines
-                for phrase in re.split(
-                    r"(?<=[.!?।])\s+|,\s+|\s+(?=लेकिन|but then|then I realized)", line
-                )
-                if len(phrase.split()) >= 3
-            ]
-            title = max(
-                clauses or lines,
-                key=lambda t: (
-                    hits(t, "Discovery") * 2
-                    + abs(sentiment(t))
-                    + bool(re.search(r"\d", t))
-                ),
+        if not reasons:
+            reasons.append("A continuous thought fits the target editorial length.")
+        clauses = [
+            phrase.strip()
+            for line in lines
+            for phrase in re.split(
+                r"(?<=[.!?।])\s+|,\s+|\s+(?=लेकिन|but then|then I realized)", line
             )
-            best = (
-                score,
-                dict(
-                    id=f"{i}-{j}",
-                    start=start,
-                    end=window[-1][1],
-                    rows=window,
-                    arc=arc,
-                    title=title
-                    if len(title.split()) <= 18
-                    else " ".join(title.split()[:16]) + "…",
-                    score=round(max(1, min(99, score))),
-                    reasons=reasons,
-                    curve=curve,
-                    waveform=[
-                        round(
-                            max(
-                                levels[
-                                    int((start + duration * k / 20) * 5) : max(
-                                        int((start + duration * k / 20) * 5) + 1,
-                                        int((start + duration * (k + 1) / 20) * 5),
-                                    )
-                                ],
-                                default=-70,
-                            ),
-                            1,
-                        )
-                        for k in range(20)
-                    ]
-                    if levels
-                    else [],
-                ),
-            )
-        if best:
-            candidates.append(best[1])
+            if len(phrase.split()) >= 3
+        ]
+        title = max(
+            clauses or lines,
+            key=lambda t: (
+                hits(t, "Discovery") * 2
+                + abs(sentiment(t))
+                + bool(re.search(r"\d", t))
+            ),
+        )
+        candidates.append(
+            dict(
+                id=f"{i}-{j}-{target}",
+                start=start,
+                end=end,
+                rows=window,
+                arc=arc,
+                title=title
+                if len(title.split()) <= 18
+                else " ".join(title.split()[:16]) + "…",
+                score=round(max(1, min(99, score))),
+                reasons=reasons,
+                curve=curve,
+                waveform=[
+                    round(
+                        max(
+                            levels[
+                                int((start + duration * k / 20) * 5) : max(
+                                    int((start + duration * k / 20) * 5) + 1,
+                                    int((start + duration * (k + 1) / 20) * 5),
+                                )
+                            ],
+                            default=-70,
+                        ),
+                        1,
+                    )
+                    for k in range(20)
+                ]
+                if levels
+                else [],
+            ),
+        )
     selected = []
     for c in sorted(candidates, key=lambda c: -c["score"]):
-        if all(c["end"] <= s["start"] or c["start"] >= s["end"] for s in selected):
+        if all(min(c["end"],s["end"])-max(c["start"],s["start"])<=target*.3 for s in selected):
             selected.append(c)
         if len(selected) == 8:
             break

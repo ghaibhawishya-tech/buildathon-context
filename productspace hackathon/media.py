@@ -159,6 +159,7 @@ def captions(clip, platform="YouTube"):
 
 
 def render(source, clip, directory, platform="YouTube"):
+    if round(clip["end"]-clip["start"],4)<30: raise ValueError("Every generated clip must be at least 30 seconds.")
     out = directory / (clip["id"] + "-" + platform + ".mp4")
     if out.exists():
         return out
