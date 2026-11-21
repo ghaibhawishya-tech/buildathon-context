@@ -4,6 +4,7 @@ WORKDIR /studio
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py editor.py speech.py media.py engine.py demo.json README.md .env.example Dockerfile ./
+RUN printf ".runtime\ndata\n.venv\n.env\n__pycache__\n*.zip\n" > .dockerignore
 COPY static ./static
 ENV HOST=0.0.0.0 PORT=8787 AFTERTONE_DATA=/studio/data
 EXPOSE 8787

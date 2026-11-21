@@ -3,6 +3,7 @@ import json
 import os
 import secrets
 import sqlite3
+import shutil
 import threading
 import time
 import uuid
@@ -22,24 +23,32 @@ from engine import parse_srt, platform_copy, rank
 from media import captions, probe, render, transcribe
 
 ROOT = Path(__file__).resolve().parent
-load_dotenv(ROOT/".env")
-DATA = Path(os.environ.get("AFTERTONE_DATA", ROOT/"data")).resolve()
-DATA.mkdir(exist_ok=True,parents=True)
-DB = DATA/"studio.sqlite"
-app=Flask(__name__)
-app.config.update(MAX_CONTENT_LENGTH=512*1024**2, SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
-pool=ThreadPoolExecutor(max_workers=2)
-slots=threading.BoundedSemaphore(6)
-render_slots=threading.BoundedSemaphore(2)
-PLATFORMS=("YouTube","Instagram","LinkedIn")
+load_dotenv(ROOT / ".env")
+DATA = Path(os.environ.get("AFTERTONE_DATA", ROOT / "data")).resolve()
+DATA.mkdir(exist_ok=True, parents=True)
+DB = DATA / "studio.sqlite"
+app = Flask(__name__)
+app.config.update(
+    MAX_CONTENT_LENGTH=512 * 1024**2,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
+pool = ThreadPoolExecutor(max_workers=2)
+slots = threading.BoundedSemaphore(6)
+render_slots = threading.BoundedSemaphore(2)
+PLATFORMS = ("YouTube", "Instagram", "LinkedIn")
+
 
 @contextmanager
 def db():
-    con=sqlite3.connect(DB,timeout=20)
-    con.row_factory=sqlite3.Row
+    con = sqlite3.connect(DB, timeout=20)
+    con.row_factory = sqlite3.Row
     try:
-        with con: yield con
-    finally: con.close()
+        with con:
+            yield con
+    finally:
+        con.close()
+
 
 with db() as c:
     c.executescript("""
@@ -50,247 +59,553 @@ with db() as c:
     CREATE TABLE IF NOT EXISTS calendar(id PRIMARY KEY,owner,project,clip,platform,copy,at REAL,auto INTEGER,status);
     CREATE TABLE IF NOT EXISTS channels(owner PRIMARY KEY,refresh);
     """)
-    c.execute("INSERT OR IGNORE INTO config VALUES('secret',?)",(secrets.token_hex(32),))
-    app.secret_key=c.execute("SELECT v FROM config WHERE k='secret'").fetchone()[0]
-    c.execute("UPDATE projects SET status='Processing interrupted. Import the recording again.' WHERE clips IS NULL")
-    c.execute("UPDATE calendar SET status='Interrupted. Verify your channel before rescheduling.' WHERE status='Uploading'")
+    c.execute(
+        "INSERT OR IGNORE INTO config VALUES('secret',?)", (secrets.token_hex(32),)
+    )
+    app.secret_key = c.execute("SELECT v FROM config WHERE k='secret'").fetchone()[0]
+    c.execute(
+        "UPDATE projects SET status='Processing interrupted. Import the recording again.' WHERE clips IS NULL"
+    )
+    c.execute(
+        "UPDATE calendar SET status='Interrupted. Verify your channel before rescheduling.' WHERE status='Uploading'"
+    )
 
-def uid(): return uuid.uuid4().hex
+
+def uid():
+    return uuid.uuid4().hex
+
+
 def owner():
-    if 'owner' not in session: session['owner']=uid()
-    return session['owner']
+    if "owner" not in session:
+        session["owner"] = uid()
+    return session["owner"]
+
 
 @app.before_request
 def guard():
-    if request.method=="POST" and request.headers.get("Origin"):
-        if urlsplit(request.headers["Origin"]).netloc!=request.host: abort(403)
+    if request.method == "POST" and request.headers.get("Origin"):
+        if urlsplit(request.headers["Origin"]).netloc != request.host:
+            abort(403)
+
 
 @app.errorhandler(ValueError)
-def invalid(e): return jsonify(error=str(e)),400
+def invalid(e):
+    return jsonify(error=str(e)), 400
 
-def project(pid,who):
-    with db() as c: row=c.execute("SELECT * FROM projects WHERE id=? AND owner=?",(pid,who)).fetchone()
-    if not row: abort(404)
+
+def project(pid, who):
+    with db() as c:
+        row = c.execute(
+            "SELECT * FROM projects WHERE id=? AND owner=?", (pid, who)
+        ).fetchone()
+    if not row:
+        abort(404)
     return row
 
-def clip_of(p,cid):
-    clips=json.loads(p["clips"] or "[]")
-    return next((x for x in clips if x["id"]==cid),None) or abort(404)
+
+def clip_of(p, cid):
+    clips = json.loads(p["clips"] or "[]")
+    return next((x for x in clips if x["id"] == cid), None) or abort(404)
+
 
 def memories(who):
     with db() as c:
-        edits=[dict(x) for x in c.execute("SELECT * FROM edits WHERE owner=? ORDER BY rowid DESC LIMIT 100",(who,))]
-        metrics={str(i):dict(x) for i,x in enumerate(c.execute("SELECT arc,retention FROM metrics WHERE owner=?",(who,)))}
-    return edits,metrics
+        edits = [
+            dict(x)
+            for x in c.execute(
+                "SELECT * FROM edits WHERE owner=? ORDER BY rowid DESC LIMIT 100",
+                (who,),
+            )
+        ]
+        metrics = {
+            str(i): dict(x)
+            for i, x in enumerate(
+                c.execute("SELECT arc,retention FROM metrics WHERE owner=?", (who,))
+            )
+        }
+    return edits, metrics
 
-def insert(who,title,source,rows=None):
-    pid=uid()
-    (DATA/pid).mkdir()
-    clips=rank(rows,memories(who)[1]) if rows else None
+
+def insert(who, title, source, rows=None):
+    pid = uid()
+    (DATA / pid).mkdir()
+    clips = rank(rows, memories(who)[1]) if rows else None
     with db() as c:
-        c.execute("INSERT INTO projects VALUES(?,?,?,?,?,?,?)",(pid,who,title,"Ready" if clips else "Reading source",str(source),json.dumps(clips) if clips else None,json.dumps(rows)))
+        c.execute(
+            "INSERT INTO projects VALUES(?,?,?,?,?,?,?)",
+            (
+                pid,
+                who,
+                title,
+                "Ready" if clips else "Reading source",
+                str(source),
+                json.dumps(clips) if clips else None,
+                json.dumps(rows),
+            ),
+        )
     return pid
 
+
 @app.get("/")
-def home(): return app.send_static_file("index.html")
+def home():
+    return app.send_static_file("index.html")
+
 
 @app.get("/api/studio")
 def studio():
-    who=owner()
+    who = owner()
     with db() as c:
-        projects=[dict(r) for r in c.execute("SELECT id,title,status FROM projects WHERE owner=? ORDER BY rowid DESC",(who,))]
-        calendar=[dict(r) for r in c.execute("SELECT calendar.*,projects.title FROM calendar JOIN projects ON projects.id=calendar.project WHERE calendar.owner=? ORDER BY at",(who,))]
-        linked=bool(c.execute("SELECT 1 FROM channels WHERE owner=?",(who,)).fetchone())
-    edits,metrics=memories(who)
-    return jsonify(projects=projects,calendar=calendar,edits=len(edits),metrics=list(metrics.values()),linked=linked,sarvam=bool(os.getenv("SARVAM_API_KEY")),youtube=bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET") and os.getenv("PUBLIC_URL")))
+        projects = [
+            dict(r)
+            for r in c.execute(
+                "SELECT id,title,status FROM projects WHERE owner=? ORDER BY rowid DESC",
+                (who,),
+            )
+        ]
+        calendar = [
+            dict(r)
+            for r in c.execute(
+                "SELECT calendar.*,projects.title FROM calendar JOIN projects ON projects.id=calendar.project WHERE calendar.owner=? ORDER BY at",
+                (who,),
+            )
+        ]
+        linked = bool(
+            c.execute("SELECT 1 FROM channels WHERE owner=?", (who,)).fetchone()
+        )
+    edits, metrics = memories(who)
+    return jsonify(
+        projects=projects,
+        calendar=calendar,
+        edits=len(edits),
+        metrics=list(metrics.values()),
+        linked=linked,
+        sarvam=bool(os.getenv("SARVAM_API_KEY")),
+        youtube=bool(
+            os.getenv("GOOGLE_CLIENT_ID")
+            and os.getenv("GOOGLE_CLIENT_SECRET")
+            and os.getenv("PUBLIC_URL")
+        ),
+    )
+
 
 @app.post("/api/demo")
 def demo():
-    who=owner()
-    with db() as c: row=c.execute("SELECT id FROM projects WHERE owner=? AND source=?",(who,str(ROOT/"static/demo.mp3"))).fetchone()
-    pid=row[0] if row else insert(who,"The Rough Cut",ROOT/"static/demo.mp3",json.loads((ROOT/"demo.json").read_text()))
+    who = owner()
+    with db() as c:
+        row = c.execute(
+            "SELECT id FROM projects WHERE owner=? AND source=?",
+            (who, str(ROOT / "static/demo.mp3")),
+        ).fetchone()
+    pid = (
+        row[0]
+        if row
+        else insert(
+            who,
+            "The Rough Cut",
+            ROOT / "static/demo.mp3",
+            json.loads((ROOT / "demo.json").read_text()),
+        )
+    )
     return jsonify(id=pid)
+
 
 @app.post("/api/import")
 def ingest():
-    who=owner()
-    media=request.files.get("media")
-    srt=request.files.get("srt")
-    if not media or not media.filename: raise ValueError("Choose a video or podcast.")
+    who = owner()
+    volume = shutil.disk_usage(DATA)
+    used = sum(f.stat().st_size for f in DATA.glob("*/source") if f.is_file())
+    limit = int(os.getenv("AFTERTONE_UPLOAD_BUDGET_MB", "4096")) * 1024**2
+    incoming = request.content_length or app.config["MAX_CONTENT_LENGTH"]
+    if used + incoming > limit or volume.free < incoming + 1024**3:
+        return jsonify(error="The studio has reached its upload storage budget."), 507
+    media = request.files.get("media")
+    srt = request.files.get("srt")
+    if not media or not media.filename:
+        raise ValueError("Choose a video or podcast.")
 
-    rows=parse_srt(srt.read(4_000_000).decode("utf-8-sig")) if srt and srt.filename else None
-    if rows and len(rows)>12000: raise ValueError("Import up to 12,000 subtitle cues at once.")
-    if not slots.acquire(blocking=False): return jsonify(error="The import queue is full. Try again shortly."),429
+    rows = (
+        parse_srt(srt.read(4_000_000).decode("utf-8-sig"))
+        if srt and srt.filename
+        else None
+    )
+    if rows and len(rows) > 12000:
+        raise ValueError("Import up to 12,000 subtitle cues at once.")
+    if not slots.acquire(blocking=False):
+        return jsonify(error="The import queue is full. Try again shortly."), 429
     try:
-        pid=insert(who,Path(media.filename).stem[:150],"")
-        src=DATA/pid/"source"
+        pid = insert(who, Path(media.filename).stem[:150], "")
+        src = DATA / pid / "source"
         media.save(src)
-        lang=request.form.get("language","unknown")
-        if lang not in ("unknown","hi-IN","en-IN"): lang="unknown"
-        pool.submit(process,pid,who,src,rows,lang,request.form.get("sarvam")=="on" and bool(os.getenv("SARVAM_API_KEY")))
+        lang = request.form.get("language", "unknown")
+        if lang not in ("unknown", "hi-IN", "en-IN"):
+            lang = "unknown"
+        pool.submit(
+            process,
+            pid,
+            who,
+            src,
+            rows,
+            lang,
+            request.form.get("sarvam") == "on" and bool(os.getenv("SARVAM_API_KEY")),
+        )
     except Exception:
         slots.release()
         raise
-    return jsonify(id=pid),202
+    return jsonify(id=pid), 202
 
-def process(pid,who,src,rows,lang,cloud):
+
+def process(pid, who, src, rows, lang, cloud):
     def progress(s):
-        with db() as c: c.execute("UPDATE projects SET status=? WHERE id=?",(s,pid))
+        with db() as c:
+            c.execute("UPDATE projects SET status=? WHERE id=?", (s, pid))
+
     try:
-        duration,_=probe(src)
-        if duration>3*3600: raise ValueError("Import a recording under three hours.")
+        duration, _ = probe(src)
+        if duration > 3 * 3600:
+            raise ValueError("Import a recording under three hours.")
         if rows is None:
             if cloud:
-                rows=transcribe(src,duration,lang,progress)
+                rows = transcribe(src, duration, lang, progress)
             else:
-                rows=local_transcribe(src,duration,lang,progress,DATA/"models")
-        rows=[[a,min(b,duration),t] for a,b,t in rows if a<duration and b>a]
-        if not rows: raise ValueError("Caption timestamps fall outside the recording.")
+                rows = local_transcribe(src, duration, lang, progress, DATA / "models")
+        rows = [[a, min(b, duration), t] for a, b, t in rows if a < duration and b > a]
+        if not rows:
+            raise ValueError("Caption timestamps fall outside the recording.")
         progress("Finding emotional arcs")
-        edits,metrics=memories(who)
-        clips=rank(rows,metrics)
-        if cloud: clips=refine(clips,edits)
-        with db() as c: c.execute("UPDATE projects SET status='Ready',source=?,clips=?,rows=? WHERE id=?",(str(src),json.dumps(clips),json.dumps(rows),pid))
+        edits, metrics = memories(who)
+        clips = rank(rows, metrics)
+        if cloud:
+            clips = refine(clips, edits)
+        with db() as c:
+            c.execute(
+                "UPDATE projects SET status='Ready',source=?,clips=?,rows=? WHERE id=?",
+                (str(src), json.dumps(clips), json.dumps(rows), pid),
+            )
     except Exception as e:
-        progress(str(e)[:180] if isinstance(e,ValueError) else "Import failed. Check the recording and transcription service.")
-    finally: slots.release()
+        progress(
+            str(e)[:180]
+            if isinstance(e, ValueError)
+            else "Import failed. Check the recording and transcription service."
+        )
+    finally:
+        slots.release()
+
 
 @app.get("/api/projects/<pid>")
 def detail(pid):
-    who=owner()
-    p=project(pid,who)
-    clips=json.loads(p["clips"] or "[]")
-    edits,_=memories(who)
+    who = owner()
+    p = project(pid, who)
+    clips = json.loads(p["clips"] or "[]")
+    edits, _ = memories(who)
     for clip in clips:
-        clip["copy"]={plat:next((e["after"] for e in edits if (e["project"],e["clip"],e["platform"])==(pid,clip["id"],plat)),platform_copy(clip,plat,edits)) for plat in PLATFORMS}
-    return jsonify(id=pid,title=p["title"],status=p["status"],clips=clips,demo=p["source"]==str(ROOT/"static/demo.mp3"))
+        clip["copy"] = {
+            plat: next(
+                (
+                    e["after"]
+                    for e in edits
+                    if (e["project"], e["clip"], e["platform"])
+                    == (pid, clip["id"], plat)
+                ),
+                platform_copy(clip, plat, edits),
+            )
+            for plat in PLATFORMS
+        }
+    return jsonify(
+        id=pid,
+        title=p["title"],
+        status=p["status"],
+        clips=clips,
+        demo=p["source"] == str(ROOT / "static/demo.mp3"),
+    )
+
 
 @app.get("/api/projects/<pid>/source")
 def original(pid):
-    p=project(pid,owner())
-    if not p["source"]: abort(404)
-    return send_file(p["source"],download_name=p["title"],conditional=True)
+    p = project(pid, owner())
+    if not p["source"]:
+        abort(404)
+    return send_file(p["source"], download_name=p["title"], conditional=True)
+
 
 @app.post("/api/projects/<pid>/<cid>/edit")
-def edit(pid,cid):
-    who=owner()
-    clip=clip_of(project(pid,who),cid)
-    plat=request.json["platform"]
-    after=str(request.json["copy"]).strip()[:2000]
-    if plat not in PLATFORMS or not after: raise ValueError("Choose a platform and enter your copy.")
-    before=platform_copy(clip,plat,memories(who)[0])
-    with db() as c: c.execute("INSERT INTO edits VALUES(?,?,?,?,?,?) ON CONFLICT(owner,project,clip,platform) DO UPDATE SET after=excluded.after",(who,pid,cid,plat,before,after))
+def edit(pid, cid):
+    who = owner()
+    clip = clip_of(project(pid, who), cid)
+    plat = request.json["platform"]
+    after = str(request.json["copy"]).strip()[:2000]
+    if plat not in PLATFORMS or not after:
+        raise ValueError("Choose a platform and enter your copy.")
+    before = platform_copy(clip, plat, memories(who)[0])
+    with db() as c:
+        c.execute(
+            "INSERT INTO edits VALUES(?,?,?,?,?,?) ON CONFLICT(owner,project,clip,platform) DO UPDATE SET after=excluded.after",
+            (who, pid, cid, plat, before, after),
+        )
     return jsonify(ok=True)
 
+
 @app.post("/api/projects/<pid>/<cid>/metric")
-def metric(pid,cid):
-    who=owner()
-    clip=clip_of(project(pid,who),cid)
-    value=float(request.json["retention"])
-    if not 0<=value<=100: raise ValueError("Retention must be between 0 and 100.")
-    with db() as c: c.execute("INSERT OR REPLACE INTO metrics VALUES(?,?,?,?,?)",(who,pid,cid,clip["arc"],value))
+def metric(pid, cid):
+    who = owner()
+    clip = clip_of(project(pid, who), cid)
+    value = float(request.json["retention"])
+    if not 0 <= value <= 100:
+        raise ValueError("Retention must be between 0 and 100.")
+    with db() as c:
+        c.execute(
+            "INSERT OR REPLACE INTO metrics VALUES(?,?,?,?,?)",
+            (who, pid, cid, clip["arc"], value),
+        )
     return jsonify(ok=True)
+
 
 @app.post("/api/projects/<pid>/rank")
 def rerank(pid):
-    who=owner()
-    p=project(pid,who)
-    if not p["clips"]: raise ValueError("Wait for the import to finish.")
-    clips=rank(json.loads(p["rows"]),memories(who)[1])
+    who = owner()
+    p = project(pid, who)
+    if not p["clips"]:
+        raise ValueError("Wait for the import to finish.")
+    clips = rank(json.loads(p["rows"]), memories(who)[1])
     # Keep older cuts addressable for scheduled exports, even when rankings change.
     with db() as c:
         for clip in json.loads(p["clips"]):
-            (DATA/pid/(clip["id"]+".json")).write_text(json.dumps(clip))
-        c.execute("UPDATE projects SET clips=? WHERE id=?",(json.dumps(clips),pid))
+            (DATA / pid / (clip["id"] + ".json")).write_text(json.dumps(clip))
+        c.execute("UPDATE projects SET clips=? WHERE id=?", (json.dumps(clips), pid))
     return jsonify(ok=True)
 
+
 @app.get("/api/projects/<pid>/<cid>/export/<kind>")
-def export(pid,cid,kind):
-    p=project(pid,owner())
-    clip=clip_of(p,cid)
-    if kind=="srt": return send_file(io.BytesIO(captions(clip).encode()),download_name="aftertone-"+cid+".srt",as_attachment=True)
-    if kind!="mp4": abort(404)
-    with render_slots: path=render(Path(p["source"]),clip,DATA/pid)
-    return send_file(path,download_name="aftertone-"+cid+".mp4",as_attachment=request.args.get("download")=="1")
+def export(pid, cid, kind):
+    p = project(pid, owner())
+    clip = clip_of(p, cid)
+    platform = request.args.get("platform", "YouTube")
+    if platform not in PLATFORMS:
+        abort(400)
+    if kind == "srt":
+        return send_file(
+            io.BytesIO(captions(clip, platform).encode()),
+            download_name="aftertone-" + cid + ".srt",
+            as_attachment=True,
+        )
+    if kind != "mp4":
+        abort(404)
+    with render_slots:
+        path = render(Path(p["source"]), clip, DATA / pid, platform)
+    return send_file(
+        path,
+        download_name="aftertone-" + cid + ".mp4",
+        as_attachment=request.args.get("download") == "1",
+    )
+
 
 @app.get("/download")
 def download():
-    buffer=io.BytesIO()
-    with zipfile.ZipFile(buffer,"w",zipfile.ZIP_DEFLATED) as z:
-        for name in ("README.md","requirements.txt","engine.py","media.py","editor.py","speech.py","app.py",".env.example","Dockerfile","demo.json"):
-            z.write(ROOT/name,"Aftertone/"+name)
-        for f in (ROOT/"static").iterdir():
-            if f.is_file(): z.write(f,"Aftertone/static/"+f.name)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
+        for name in (
+            "README.md",
+            "requirements.txt",
+            "engine.py",
+            "media.py",
+            "editor.py",
+            "speech.py",
+            "app.py",
+            ".env.example",
+            "Dockerfile",
+            "demo.json",
+            ".dockerignore",
+        ):
+            z.write(ROOT / name, "Aftertone/" + name)
+        for f in (ROOT / "static").iterdir():
+            if f.is_file():
+                z.write(f, "Aftertone/static/" + f.name)
     buffer.seek(0)
-    return send_file(buffer,download_name="Aftertone-Studio.zip",as_attachment=True)
+    return send_file(buffer, download_name="Aftertone-Studio.zip", as_attachment=True)
+
 
 @app.get("/youtube/connect")
 def connect():
-    if not all(os.getenv(k) for k in ("GOOGLE_CLIENT_ID","GOOGLE_CLIENT_SECRET","PUBLIC_URL")): raise ValueError("Configure YouTube OAuth on the server first.")
+    if not all(
+        os.getenv(k) for k in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "PUBLIC_URL")
+    ):
+        raise ValueError("Configure YouTube OAuth on the server first.")
     owner()
-    session["state"]=secrets.token_urlsafe(32)
-    args=dict(client_id=os.environ["GOOGLE_CLIENT_ID"],redirect_uri=os.environ["PUBLIC_URL"].rstrip("/")+"/youtube/callback",response_type="code",scope="https://www.googleapis.com/auth/youtube.upload",state=session["state"],access_type="offline",prompt="consent")
-    return redirect("https://accounts.google.com/o/oauth2/v2/auth?"+urlencode(args))
+    session["state"] = secrets.token_urlsafe(32)
+    args = dict(
+        client_id=os.environ["GOOGLE_CLIENT_ID"],
+        redirect_uri=os.environ["PUBLIC_URL"].rstrip("/") + "/youtube/callback",
+        response_type="code",
+        scope="https://www.googleapis.com/auth/youtube.upload",
+        state=session["state"],
+        access_type="offline",
+        prompt="consent",
+    )
+    return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(args))
+
 
 def google_token(**values):
-    r=requests.post("https://oauth2.googleapis.com/token",data=dict(client_id=os.environ["GOOGLE_CLIENT_ID"],client_secret=os.environ["GOOGLE_CLIENT_SECRET"],**values),timeout=30)
-    if not r.ok: raise ValueError("Google authorization expired or was declined. Reconnect your channel.")
+    r = requests.post(
+        "https://oauth2.googleapis.com/token",
+        data=dict(
+            client_id=os.environ["GOOGLE_CLIENT_ID"],
+            client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
+            **values,
+        ),
+        timeout=30,
+    )
+    if not r.ok:
+        raise ValueError(
+            "Google authorization expired or was declined. Reconnect your channel."
+        )
     return r.json()
+
 
 @app.get("/youtube/callback")
 def callback():
-    expected=session.pop("state",None)
-    if not expected or not secrets.compare_digest(expected,request.args.get("state","")): abort(403)
-    result=google_token(code=request.args.get("code",""),redirect_uri=os.environ["PUBLIC_URL"].rstrip("/")+"/youtube/callback",grant_type="authorization_code")
-    with db() as c: c.execute("INSERT OR REPLACE INTO channels VALUES(?,?)",(owner(),result["refresh_token"]))
+    expected = session.pop("state", None)
+    if not expected or not secrets.compare_digest(
+        expected, request.args.get("state", "")
+    ):
+        abort(403)
+    result = google_token(
+        code=request.args.get("code", ""),
+        redirect_uri=os.environ["PUBLIC_URL"].rstrip("/") + "/youtube/callback",
+        grant_type="authorization_code",
+    )
+    with db() as c:
+        c.execute(
+            "INSERT OR REPLACE INTO channels VALUES(?,?)",
+            (owner(), result["refresh_token"]),
+        )
     return redirect("/")
 
+
 @app.post("/api/projects/<pid>/<cid>/schedule")
-def schedule(pid,cid):
-    who=owner()
-    clip_of(project(pid,who),cid)
-    d=request.json
-    at=float(d["at"])
-    if not time.time()-60<at<time.time()+366*86400 or d["platform"] not in PLATFORMS: raise ValueError("Choose a future date within a year and a valid platform.")
-    auto=d.get("auto") is True
+def schedule(pid, cid):
+    who = owner()
+    clip_of(project(pid, who), cid)
+    d = request.json
+    at = float(d["at"])
+    if (
+        not time.time() - 60 < at < time.time() + 366 * 86400
+        or d["platform"] not in PLATFORMS
+    ):
+        raise ValueError("Choose a future date within a year and a valid platform.")
+    auto = d.get("auto") is True
     with db() as c:
-        if auto and (d["platform"]!="YouTube" or not c.execute("SELECT 1 FROM channels WHERE owner=?",(who,)).fetchone()): raise ValueError("Connect your own YouTube channel to enable publishing.")
-        c.execute("INSERT INTO calendar VALUES(?,?,?,?,?,?,?,?,?)",(uid(),who,pid,cid,d["platform"],str(d["copy"])[:2000],at,auto,"Scheduled" if auto else "Planned"))
+        if auto and (
+            d["platform"] != "YouTube"
+            or not c.execute("SELECT 1 FROM channels WHERE owner=?", (who,)).fetchone()
+        ):
+            raise ValueError("Connect your own YouTube channel to enable publishing.")
+        c.execute(
+            "INSERT INTO calendar VALUES(?,?,?,?,?,?,?,?,?)",
+            (
+                uid(),
+                who,
+                pid,
+                cid,
+                d["platform"],
+                str(d["copy"])[:2000],
+                at,
+                auto,
+                "Scheduled" if auto else "Planned",
+            ),
+        )
     return jsonify(ok=True)
+
 
 @app.post("/api/calendar/<item>/cancel")
 def cancel(item):
-    with db() as c: c.execute("UPDATE calendar SET status='Cancelled',auto=0 WHERE id=? AND owner=? AND status IN ('Planned','Scheduled')",(item,owner()))
+    with db() as c:
+        c.execute(
+            "UPDATE calendar SET status='Cancelled',auto=0 WHERE id=? AND owner=? AND status IN ('Planned','Scheduled')",
+            (item, owner()),
+        )
     return jsonify(ok=True)
 
+
 def publish(row):
-    p=project(row["project"],row["owner"])
-    directory=DATA/p["id"]
-    clip=next((x for x in json.loads(p["clips"]) if x["id"]==row["clip"]),None)
-    if not clip: clip=json.loads((directory/(row["clip"]+".json")).read_text())
-    with render_slots: path=render(Path(p["source"]),clip,directory)
-    with db() as c: refresh=c.execute("SELECT refresh FROM channels WHERE owner=?",(row["owner"],)).fetchone()[0]
-    token=google_token(refresh_token=refresh,grant_type="refresh_token")["access_token"]
-    hdr={"Authorization":"Bearer "+token}
-    init=requests.post("https://www.googleapis.com/upload/youtube/v3/videos",params={"uploadType":"resumable","part":"snippet,status","notifySubscribers":"false"},headers={**hdr,"X-Upload-Content-Type":"video/mp4"},json={"snippet":{"title":(row["copy"].splitlines() or [p["title"]])[0][:100],"description":row["copy"]},"status":{"privacyStatus":"public"}},timeout=30)
+    p = project(row["project"], row["owner"])
+    directory = DATA / p["id"]
+    clip = next((x for x in json.loads(p["clips"]) if x["id"] == row["clip"]), None)
+    if not clip:
+        clip = json.loads((directory / (row["clip"] + ".json")).read_text())
+    with render_slots:
+        path = render(Path(p["source"]), clip, directory)
+    with db() as c:
+        refresh = c.execute(
+            "SELECT refresh FROM channels WHERE owner=?", (row["owner"],)
+        ).fetchone()[0]
+    token = google_token(refresh_token=refresh, grant_type="refresh_token")[
+        "access_token"
+    ]
+    hdr = {"Authorization": "Bearer " + token}
+    init = requests.post(
+        "https://www.googleapis.com/upload/youtube/v3/videos",
+        params={
+            "uploadType": "resumable",
+            "part": "snippet,status",
+            "notifySubscribers": "false",
+        },
+        headers={**hdr, "X-Upload-Content-Type": "video/mp4"},
+        json={
+            "snippet": {
+                "title": (row["copy"].splitlines() or [p["title"]])[0][:100],
+                "description": row["copy"],
+            },
+            "status": {"privacyStatus": "public"},
+        },
+        timeout=30,
+    )
     init.raise_for_status()
     with path.open("rb") as f:
-        resp=requests.put(init.headers["Location"],data=f,headers={"Content-Type":"video/mp4"},timeout=300)
+        resp = requests.put(
+            init.headers["Location"],
+            data=f,
+            headers={"Content-Type": "video/mp4"},
+            timeout=300,
+        )
     resp.raise_for_status()
-    return "Uploaded · "+resp.json()["id"]
+    return "Uploaded · " + resp.json()["id"]
+
 
 def worker():
     while True:
         with db() as c:
-            row=c.execute("SELECT * FROM calendar WHERE auto=1 AND status='Scheduled' AND at<=? ORDER BY at LIMIT 1",(time.time(),)).fetchone()
-            if row and c.execute("UPDATE calendar SET status='Uploading' WHERE id=? AND status='Scheduled'",(row["id"],)).rowcount==0: row=None
+            row = c.execute(
+                "SELECT * FROM calendar WHERE auto=1 AND status='Scheduled' AND at<=? ORDER BY at LIMIT 1",
+                (time.time(),),
+            ).fetchone()
+            if (
+                row
+                and c.execute(
+                    "UPDATE calendar SET status='Uploading' WHERE id=? AND status='Scheduled'",
+                    (row["id"],),
+                ).rowcount
+                == 0
+            ):
+                row = None
         if row:
-            try: status=publish(row)
-            except Exception: status="Upload failed. Check channel access and verify YouTube Studio before rescheduling."
-            with db() as c: c.execute("UPDATE calendar SET status=? WHERE id=?",(status,row["id"]))
-        else: time.sleep(5)
+            try:
+                status = publish(row)
+            except Exception:
+                status = "Upload failed. Check channel access and verify YouTube Studio before rescheduling."
+            with db() as c:
+                c.execute(
+                    "UPDATE calendar SET status=? WHERE id=?", (status, row["id"])
+                )
+        else:
+            time.sleep(5)
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     from waitress import serve
-    threading.Thread(target=worker,daemon=True).start()
-    serve(app,host=os.getenv("HOST","127.0.0.1"),port=int(os.getenv("PORT","8787")),max_request_body_size=512*1024**2)
+
+    threading.Thread(target=worker, daemon=True).start()
+    serve(
+        app,
+        host=os.getenv("HOST", "127.0.0.1"),
+        port=int(os.getenv("PORT", "8787")),
+        max_request_body_size=512 * 1024**2,
+    )
