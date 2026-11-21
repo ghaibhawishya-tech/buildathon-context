@@ -16,6 +16,8 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, redirect, request, send_file, session
 
+from editor import refine
+from speech import local_transcribe
 from engine import parse_srt, platform_copy, rank
 from media import captions, probe, render, transcribe
 
@@ -115,7 +117,7 @@ def ingest():
     media=request.files.get("media")
     srt=request.files.get("srt")
     if not media or not media.filename: raise ValueError("Choose a video or podcast.")
-    if not srt and not os.getenv("SARVAM_API_KEY"): raise ValueError("Attach a timed SRT for this recording.")
+
     rows=parse_srt(srt.read(4_000_000).decode("utf-8-sig")) if srt and srt.filename else None
     if rows and len(rows)>12000: raise ValueError("Import up to 12,000 subtitle cues at once.")
     if not slots.acquire(blocking=False): return jsonify(error="The import queue is full. Try again shortly."),429
@@ -125,23 +127,29 @@ def ingest():
         media.save(src)
         lang=request.form.get("language","unknown")
         if lang not in ("unknown","hi-IN","en-IN"): lang="unknown"
-        pool.submit(process,pid,who,src,rows,lang)
+        pool.submit(process,pid,who,src,rows,lang,request.form.get("sarvam")=="on" and bool(os.getenv("SARVAM_API_KEY")))
     except Exception:
         slots.release()
         raise
     return jsonify(id=pid),202
 
-def process(pid,who,src,rows,lang):
+def process(pid,who,src,rows,lang,cloud):
     def progress(s):
         with db() as c: c.execute("UPDATE projects SET status=? WHERE id=?",(s,pid))
     try:
         duration,_=probe(src)
         if duration>3*3600: raise ValueError("Import a recording under three hours.")
-        if rows is None: rows=transcribe(src,duration,lang,progress)
+        if rows is None:
+            if cloud:
+                rows=transcribe(src,duration,lang,progress)
+            else:
+                rows=local_transcribe(src,duration,lang,progress,DATA/"models")
         rows=[[a,min(b,duration),t] for a,b,t in rows if a<duration and b>a]
         if not rows: raise ValueError("Caption timestamps fall outside the recording.")
         progress("Finding emotional arcs")
-        clips=rank(rows,memories(who)[1])
+        edits,metrics=memories(who)
+        clips=rank(rows,metrics)
+        if cloud: clips=refine(clips,edits)
         with db() as c: c.execute("UPDATE projects SET status='Ready',source=?,clips=?,rows=? WHERE id=?",(str(src),json.dumps(clips),json.dumps(rows),pid))
     except Exception as e:
         progress(str(e)[:180] if isinstance(e,ValueError) else "Import failed. Check the recording and transcription service.")
@@ -209,7 +217,7 @@ def export(pid,cid,kind):
 def download():
     buffer=io.BytesIO()
     with zipfile.ZipFile(buffer,"w",zipfile.ZIP_DEFLATED) as z:
-        for name in ("README.md","requirements.txt","engine.py","media.py","app.py",".env.example","Dockerfile","demo.json"):
+        for name in ("README.md","requirements.txt","engine.py","media.py","editor.py","speech.py","app.py",".env.example","Dockerfile","demo.json"):
             z.write(ROOT/name,"Aftertone/"+name)
         for f in (ROOT/"static").iterdir():
             if f.is_file(): z.write(f,"Aftertone/static/"+f.name)

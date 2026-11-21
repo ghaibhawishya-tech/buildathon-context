@@ -8,13 +8,14 @@ import imageio_ffmpeg
 import requests
 
 FF = imageio_ffmpeg.get_ffmpeg_exe()
+INPUT_FLAGS=["-protocol_whitelist","file,pipe","-format_whitelist","mov,matroska,webm,mp3,wav,aiff,flac,ogg,aac,avi,mpegts,mpeg,asf"]
 def run(args, timeout=600):
     result = subprocess.run([FF, "-nostdin", "-hide_banner","-loglevel","error","-y",*map(str,args)], capture_output=True,timeout=timeout)
     if result.returncode: raise ValueError("The media processor could not read or encode this file.")
     return result
 
 def probe(path):
-    result=subprocess.run([FF,"-hide_banner","-i",str(path)],capture_output=True,timeout=30)
+    result=subprocess.run([FF,"-hide_banner",*INPUT_FLAGS,"-i",str(path)],capture_output=True,timeout=30)
     info=result.stderr.decode(errors="replace")
     m=re.search(r"Duration: (\d+):(\d+):([\d.]+)",info)
     if not m or "Audio:" not in info and "Video:" not in info: raise ValueError("Choose a playable video or podcast recording.")
@@ -28,7 +29,7 @@ def transcribe(path,duration,lang,progress):
         wav=Path(temp)/"part.wav"
         for start in range(0,int(duration+.999),25):
             progress(f"Transcribing {int(100*start/duration)}%")
-            run(["-ss",start,"-i",path,"-t",25,"-vn","-ar",16000,"-ac",1,wav])
+            run(["-ss",start,*INPUT_FLAGS,"-i",path,"-t",25,"-vn","-ar",16000,"-ac",1,wav])
             with wav.open("rb") as f:
                 resp=requests.post("https://api.sarvam.ai/speech-to-text",headers={"api-subscription-key":key},files={"file":("part.wav",f,"audio/wav")},data={"model":"saaras:v3","with_timestamps":"true","language_code":lang},timeout=90)
             if not resp.ok: raise ValueError(f"Sarvam returned HTTP {resp.status_code}. Check the server key and quota.")
@@ -54,7 +55,7 @@ def render(source, clip, directory):
         temp=Path(d)
         sub=temp/"captions.srt"
         sub.write_text(captions(clip))
-        inputs=["-ss",clip["start"],"-i",source]
+        inputs=["-ss",clip["start"],*INPUT_FLAGS,"-i",source]
         if video:
             vf="[0:v]scale=540:960:force_original_aspect_ratio=decrease,pad=540:960:(ow-iw)/2:(oh-ih)/2:color=0x181920,setsar=1"
         else:

@@ -41,6 +41,7 @@ def parse_srt(raw):
 def rank(rows, feedback):
     candidates = []
     for i, (start, _, _) in enumerate(rows):
+        best=None
         for j in range(i, min(len(rows), i + 90)):
             window = rows[i:j+1]
             duration = window[-1][1] - start
@@ -61,16 +62,21 @@ def rank(rows, feedback):
             score = (50 + min(swing,3)*6 + min(change,2)*3 + 6*detail + 7*bool(payoff)
                      + 4*bool(hits(lines[0],"Curiosity") or hits(lines[0],"Tension"))
                      - abs(30-duration)*.22 - 18*len(FILLER.findall(whole)) + adjustment)
+            if best is not None and score<=best[0]: continue
             reasons = []
-            if swing: reasons.append("Emotional range spans %d point%s across the passage." % (swing, "" if swing==1 else "s"))
+            if swing:
+                low=lines[curve.index(min(curve))].split(". ")[0][:120]
+                high=lines[curve.index(max(curve))].split(". ")[0][:120]
+                reasons.append(f'Emotional low: “{low}”. Emotional high: “{high}”.')
             if change: reasons.append("The speaker signals a change in understanding.")
             if detail: reasons.append("A concrete number or causal explanation grounds the story.")
             if payoff: reasons.append("The last line resolves or reframes the opening.")
             if outcomes: reasons.append(f"Recorded retention for {arc.lower()} cuts adjusted this score by {adjustment:+.1f}.")
             if not reasons: reasons.append("A continuous thought fits the target editorial length.")
             title = max(lines, key=lambda t: hits(t,"Discovery")*2 + abs(sentiment(t)) + bool(re.search(r"\d",t)))
-            candidates.append(dict(id=f"{i}-{j}", start=start, end=window[-1][1], rows=window, arc=arc,
+            best=(score,dict(id=f"{i}-{j}", start=start, end=window[-1][1], rows=window, arc=arc,
                 title=title, score=round(max(1,min(99,score))), reasons=reasons, curve=curve))
+        if best: candidates.append(best[1])
     selected=[]
     for c in sorted(candidates,key=lambda c:-c["score"]):
         if all(c["end"]<=s["start"] or c["start"]>=s["end"] for s in selected):
@@ -87,6 +93,7 @@ def platform_copy(c, platform, edits):
     if platform == "YouTube": copy = lead[:95]
     elif platform == "Instagram": copy = lead + "\n\n" + ("#पॉडकास्ट" if re.search("[ऀ-ॿ]",lead) else "#Podcast")
     else: copy = lines[0] + ("\n\n" + lines[-1] if len(lines)>1 else "")
+    copy=c.get("drafts",{}).get(platform,copy)
     if samples:
         lengths = sorted(len(s.split()) for s in samples)
         limit = max(3,lengths[len(lengths)//2])
