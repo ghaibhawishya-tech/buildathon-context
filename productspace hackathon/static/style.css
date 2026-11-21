@@ -895,3 +895,30 @@ a:hover {
     scroll-behavior: auto !important;
   }
 }
+
+.beatlist {
+  border-left: 2px solid #dc9270;
+  margin: 16px 0;
+  padding: 0 0 0 12px;
+}
+.beatlist h3 {
+  margin-bottom: 7px;
+}
+.beatlist button {
+  display: block;
+  text-align: left;
+  padding: 6px;
+  color: #32392d;
+  font-size: 13px;
+}
+.beatlist button span {
+  display: block;
+  font: 600 10px monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rust);
+}
+.beatlist button:hover {
+  background: #eeefe5;
+  border-radius: 5px;
+}

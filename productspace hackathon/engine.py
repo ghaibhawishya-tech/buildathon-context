@@ -1,4 +1,4 @@
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from functools import lru_cache
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
@@ -66,10 +66,16 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
         voiced = sorted(v for v in levels[int(a * 5) : int(b * 5) + 1] if v > -55)
         loudness.append(voiced[len(voiced) // 2] if voiced else None)
     candidates = []
-    for i, (cue_start, _, _) in enumerate(rows):
-        start = min(cue_start, duration_available - target)
-        if i and start <= rows[i - 1][0]:
-            break
+    anchors = {
+        max(0, min(t, duration_available - target))
+        for a, b, _ in rows
+        for t in (a, b - target)
+    }
+    ends = []
+    for _, b, _ in rows:
+        ends.append(max(b, ends[-1] if ends else 0))
+    for start in sorted(anchors):
+        i = bisect_right(ends, start)
         end = start + target
         j = bisect_left(starts, end) - 1
         if j < i:
@@ -129,6 +135,8 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
             - 18 * len(FILLER.findall(whole))
             + min(4, dynamics * 0.35)
             + 3 * clean_end
+            - 11 * (start > rows[i][0] + 0.08)
+            - 15 * (end < rows[j][1] - 0.08)
             - 13 * unfinished
             + adjustment
         )
@@ -170,7 +178,7 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
         )
         candidates.append(
             dict(
-                id=f"{i}-{j}-{target}",
+                id=f"{i}-{j}-{target}-{round(start * 1000)}",
                 start=start,
                 end=end,
                 rows=window,

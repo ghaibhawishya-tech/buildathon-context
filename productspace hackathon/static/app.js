@@ -119,7 +119,14 @@ function paint() {
   if (page === "brief") {
     $("main").innerHTML =
       header +
-      '</div><article class="briefarticle"><small class="tag">Product Space · Problem 01</small><h2>A repurposing studio with brand memory.</h2><p class="lede">An hour of conversation can hold a single minute worth sharing. The editor’s job is to find it, keep the context, and make it sound like the creator.</p><div class="audionote"><div><strong>Listen to the editorial brief</strong><p>George · ElevenLabs narration</p></div><audio controls preload="metadata" src="/static/brief.mp3"></audio></div><h3>How Aftertone answers the brief</h3><ol><li><b>Ingest a recording.</b> Paste a YouTube or direct media link, or upload a video or podcast in English or Hindi.</li><li><b>Compare directions.</b> Review the emotional arc, source lines, vocal dynamics and cut score before choosing.</li><li><b>Adapt the cut.</b> Finalize a running time, then switch platforms for different caption pacing and copy.</li><li><b>Learn the voice.</b> Saved edits influence wording length, casing and hashtag use in future drafts.</li><li><b>Plan publication.</b> Put an approved cut on the calendar or opt in to a connected YouTube upload.</li><li><b>Learn from results.</b> Enter observed retention to adjust the score of similar emotional arcs.</li></ol><a class="outline" href="https://theproductspace.in/agentic-ai-hackathon/problem-statement" target="_blank" rel="noopener">Read the official brief ↗</a></article>';
+      '</div><article class="briefarticle"><small class="tag">Product Space · Problem 01</small><h2>A repurposing studio with brand memory.</h2><p class="lede">An hour of conversation can hold a single minute worth sharing. The editor’s job is to find it, keep the context, and make it sound like the creator.</p><div class="audionote"><div><strong>Listen to the editorial brief</strong><p>George · ElevenLabs narration</p></div><audio controls preload="metadata" src="/static/brief.mp3"></audio><button id="cutbrief" class="primary">Find a cut in this narration →</button></div><h3>How Aftertone answers the brief</h3><ol><li><b>Ingest a recording.</b> Paste a YouTube or direct media link, or upload a video or podcast in English or Hindi.</li><li><b>Compare directions.</b> Review the emotional arc, source lines, vocal dynamics and cut score before choosing.</li><li><b>Adapt the cut.</b> Finalize a running time, then switch platforms for different caption pacing and copy.</li><li><b>Learn the voice.</b> Saved edits influence wording length, casing and hashtag use in future drafts.</li><li><b>Plan publication.</b> Put an approved cut on the calendar or opt in to a connected YouTube upload.</li><li><b>Learn from results.</b> Enter observed retention to adjust the score of similar emotional arcs.</li></ol><a class="outline" href="https://theproductspace.in/agentic-ai-hackathon/problem-statement" target="_blank" rel="noopener">Read the official brief ↗</a></article>';
+    bind("cutbrief", async () => {
+      const { id } = await api("/api/demo", { source: "brief" });
+      page = "studio";
+      filter = "All arcs";
+      await refresh(id);
+      document.querySelector(".sourcebar").scrollIntoView();
+    });
     return;
   }
   if (page === "memory") {
@@ -367,6 +374,57 @@ function review(id) {
       )
       .join("") +
     '</div><label for="copy">Platform copy</label><textarea id="copy" maxlength="2000"></textarea><button class="outline" id="save">Save voice edit</button><details><summary>Plan publication</summary><label>Local date and time<input id="when" type="datetime-local"></label><div id="publishopts"></div><button class="primary" id="schedule">Add to calendar</button></details><details><summary>Record performance</summary><label>Average percentage viewed<input type="number" id="retention" min="0" max="100" placeholder="e.g. 72"></label><button class="outline" id="learn">Save retention</button></details><p class="notice" role="status"></p></div></div>';
+  const beats = document.createElement("section");
+  beats.className = "beatlist";
+  const mid =
+    c.rows.length > 2
+      ? c.rows
+          .slice(1, -1)
+          .reduce(
+            (best, row, index) =>
+              Math.abs(c.curve[index + 1] - c.curve[index]) > best.change
+                ? {
+                    index: index + 1,
+                    change: Math.abs(c.curve[index + 1] - c.curve[index]),
+                  }
+                : best,
+            { index: 1, change: -1 },
+          ).index
+      : 0;
+  const indices = [...new Set([0, mid, c.rows.length - 1])];
+  beats.innerHTML =
+    "<h3>Story beats</h3>" +
+    indices
+      .map(
+        (i) =>
+          '<button type="button" data-beat="' +
+          i +
+          '"><span>' +
+          (i === 0
+            ? "Opening"
+            : i === c.rows.length - 1
+              ? "Closing line"
+              : "Turn") +
+          " · " +
+          stamp(c.rows[i][0]) +
+          "</span>" +
+          esc(c.rows[i][2]) +
+          "</button>",
+      )
+      .join("");
+  beats.onclick = async (e) => {
+    const button = e.target.closest("[data-beat]");
+    if (!button) return;
+    const video = $("preview");
+    video.currentTime =
+      c.rows[Number(button.dataset.beat)][0] - (current.final ? c.start : 0);
+    try {
+      await video.play();
+    } catch (e) {
+      message("Use the player to hear this passage.");
+    }
+  };
+  $("reviewbody").querySelector("ul").after(beats);
   const approval = document.createElement("button");
   approval.id = "finalize";
   approval.className = "primary";
@@ -379,6 +437,19 @@ function review(id) {
     await refresh();
     message("Direction finalized. Your captioned export is ready to preview.");
   });
+  if (state.elevenlabs) {
+    const button = document.createElement("button");
+    button.className = "outline";
+    button.id = "voice";
+    button.textContent = "Generate ElevenLabs voiceover";
+    button.title =
+      "Send the finalized transcript to ElevenLabs and download a narrated MP4";
+    $("srt").after(button);
+    bind("voice", async () => {
+      const { url } = await api(cuturl("/voice"), { platform });
+      window.location.assign(url);
+    });
+  }
   choosePlatform();
   bind("save", async () => {
     await api(cuturl("/edit"), { platform, copy: $("copy").value });

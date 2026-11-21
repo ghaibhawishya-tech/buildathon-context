@@ -6,6 +6,9 @@ import socket
 import subprocess
 import sys
 import time
+import tempfile
+import shutil
+from media import FF
 from urllib.parse import urljoin, urlsplit, parse_qs, unquote
 from pathlib import Path
 
@@ -46,42 +49,61 @@ def fetch(url, path):
     checked(url)
     video = youtube_id(url)
     if video:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "yt_dlp",
-                "--ignore-config",
-                "--no-playlist",
-                "--no-cache-dir",
-                "--no-part",
-                "--max-filesize",
-                "512M",
-                "--socket-timeout",
-                "20",
-                "--retries",
-                "1",
-                "-f",
-                "best[protocol=https][ext=mp4]/best[protocol=https]/bestaudio[protocol=https]",
-                "-o",
-                str(path),
-                "--print",
-                "after_move:title",
-                "https://www.youtube.com/watch?v=" + video,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=240,
-        )
-        if result.returncode or not path.exists():
-            raise ValueError(
-                "YouTube could not supply this recording. Try a public media file link or upload the source."
+        with tempfile.TemporaryDirectory(dir=path.parent) as work:
+            root = Path(work).resolve()
+            encoder = root / ("ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
+            try:
+                encoder.symlink_to(FF)
+            except OSError:
+                shutil.copy2(FF, encoder)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "yt_dlp",
+                    "--ignore-config",
+                    "--no-playlist",
+                    "--no-cache-dir",
+                    "--no-part",
+                    "--max-filesize",
+                    "512M",
+                    "--match-filters",
+                    "duration <= 10800 & !is_live",
+                    "--socket-timeout",
+                    "20",
+                    "--retries",
+                    "1",
+                    "--ffmpeg-location",
+                    str(encoder),
+                    "--merge-output-format",
+                    "mp4",
+                    "-f",
+                    "best[height<=720][protocol=https]/bestvideo[height<=720][ext=mp4][protocol=https]+bestaudio[ext=m4a][protocol=https]/bestvideo[height<=720]+bestaudio",
+                    "-o",
+                    str(root / "recording.%(ext)s"),
+                    "--print",
+                    "after_move:title",
+                    "https://www.youtube.com/watch?v=" + video,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
             )
-        return (
-            result.stdout.strip().splitlines()[-1][:150]
-            if result.stdout.strip()
-            else "YouTube recording"
-        )
+            files = [
+                f
+                for f in root.glob("recording.*")
+                if f.name.count(".") == 1 and f.stat().st_size <= MAX_BYTES
+            ]
+            if result.returncode or len(files) != 1:
+                raise ValueError(
+                    "YouTube could not supply this recording within the size limit. Try a direct media link or upload the file."
+                )
+            files[0].replace(path)
+            return (
+                result.stdout.strip().splitlines()[-1][:150]
+                if result.stdout.strip()
+                else "YouTube recording"
+            )
     deadline = time.monotonic() + 240
     for _ in range(6):
         parsed = checked(url)

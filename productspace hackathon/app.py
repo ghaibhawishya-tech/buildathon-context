@@ -17,6 +17,7 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, redirect, request, send_file, session
 
+from narration import narrated
 from sources import fetch, checked
 from editor import refine
 from speech import local_transcribe
@@ -204,6 +205,7 @@ def studio():
         ],
         metrics=list(metrics.values()),
         linked=linked,
+        elevenlabs=bool(os.getenv("ELEVENLABS_API_KEY")),
         sarvam=bool(os.getenv("SARVAM_API_KEY")),
         youtube=bool(
             os.getenv("GOOGLE_CLIENT_ID")
@@ -216,19 +218,22 @@ def studio():
 @app.post("/api/demo")
 def demo():
     who = owner()
+    brief = (request.get_json(silent=True) or {}).get("source") == "brief"
+    name = "brief" if brief else "demo"
+    source = ROOT / "static" / (name + ".mp3")
     with db() as c:
         row = c.execute(
             "SELECT id FROM projects WHERE owner=? AND source=?",
-            (who, str(ROOT / "static/demo.mp3")),
+            (who, str(source)),
         ).fetchone()
     pid = (
         row[0]
         if row
         else insert(
             who,
-            "The Rough Cut",
-            ROOT / "static/demo.mp3",
-            json.loads((ROOT / "demo.json").read_text()),
+            "The editorial brief" if brief else "The Rough Cut",
+            source,
+            json.loads((ROOT / (name + ".json")).read_text()),
         )
     )
     return jsonify(id=pid)
@@ -500,6 +505,35 @@ def export(pid, cid, kind):
     )
 
 
+@app.post("/api/projects/<pid>/<cid>/voice")
+def voice(pid, cid):
+    p = project(pid, owner())
+    cut = clip_of(p, cid)
+    require_final(pid, cid)
+    platform = request.json.get("platform")
+    if platform not in PLATFORMS:
+        abort(400)
+    if not os.getenv("ELEVENLABS_API_KEY"):
+        raise ValueError("Configure ElevenLabs to create an alternate voiceover.")
+    with render_slots:
+        narrated(Path(p["source"]), cut, DATA / pid, platform)
+    return jsonify(url=f"/api/projects/{pid}/{cid}/voice/{platform}")
+
+
+@app.get("/api/projects/<pid>/<cid>/voice/<platform>")
+def download_voice(pid, cid, platform):
+    p = project(pid, owner())
+    clip_of(p, cid)
+    if platform not in PLATFORMS:
+        abort(400)
+    path = DATA / pid / (cid + "-" + platform + "-narrated.mp4")
+    if not path.is_file():
+        abort(404)
+    return send_file(
+        path, as_attachment=True, download_name="aftertone-" + cid + "-narrated.mp4"
+    )
+
+
 @app.get("/download")
 def download():
     buffer = io.BytesIO()
@@ -513,9 +547,11 @@ def download():
             "speech.py",
             "app.py",
             "sources.py",
+            "narration.py",
             ".env.example",
             "Dockerfile",
             "demo.json",
+            "brief.json",
             ".dockerignore",
         ):
             z.write(ROOT / name, "Aftertone/" + name)
