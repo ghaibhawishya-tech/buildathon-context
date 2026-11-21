@@ -157,6 +157,12 @@ def detail(pid):
         clip["copy"]={plat:next((e["after"] for e in edits if (e["project"],e["clip"],e["platform"])==(pid,clip["id"],plat)),platform_copy(clip,plat,edits)) for plat in PLATFORMS}
     return jsonify(id=pid,title=p["title"],status=p["status"],clips=clips,demo=p["source"]==str(ROOT/"static/demo.mp3"))
 
+@app.get("/api/projects/<pid>/source")
+def original(pid):
+    p=project(pid,owner())
+    if not p["source"]: abort(404)
+    return send_file(p["source"],download_name=p["title"],conditional=True)
+
 @app.post("/api/projects/<pid>/<cid>/edit")
 def edit(pid,cid):
     who=owner()
