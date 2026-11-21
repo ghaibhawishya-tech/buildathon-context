@@ -102,6 +102,34 @@ def transcribe(path, duration, lang, progress):
     return rows
 
 
+def source_levels(path):
+    # Equal 200 ms bins, before any export normalization or subtitle processing.
+    filters = "aresample=8000,asetnsamples=n=1600,astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-"
+    result = subprocess.run(
+        [
+            FF,
+            "-nostdin",
+            "-loglevel",
+            "error",
+            *INPUT_FLAGS,
+            "-i",
+            str(path),
+            "-vn",
+            "-af",
+            filters,
+            "-f",
+            "null",
+            "-",
+        ],
+        capture_output=True,
+        timeout=600,
+    )
+    return [
+        max(-70, min(0, float(v)))
+        for v in re.findall(rb"RMS_level=(-?[\d.]+|-inf)", result.stdout)
+    ]
+
+
 def captions(clip, platform="YouTube"):
     def stamp(s):
         ms = round(max(0, s) * 1000)

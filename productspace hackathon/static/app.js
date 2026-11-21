@@ -78,18 +78,17 @@ async function refresh(id) {
   paint();
 }
 function bars(c) {
-  const values = c.curve.length ? c.curve : [0];
-  return Array.from({ length: 20 }, (_, i) => {
-    const v =
-      values[Math.min(values.length - 1, Math.floor((i * values.length) / 20))];
-    return (
-      '<span style="height:' +
-      Math.round(
-        10 + Math.abs(Math.sin(i * 0.8 + v * 0.7)) * (14 + Math.abs(v) * 7),
-      ) +
-      'px"></span>'
-    );
-  }).join("");
+  const values = c.waveform?.length
+    ? c.waveform
+    : c.curve.map((v) => -40 + v * 4);
+  return values
+    .map(
+      (v) =>
+        '<span style="height:' +
+        Math.round(4 + Math.max(0, Math.min(1, (v + 55) / 50)) * 46) +
+        'px"></span>',
+    )
+    .join("");
 }
 function paint() {
   $("crumb").textContent = pages[page];
@@ -109,6 +108,18 @@ function paint() {
       '</div><h2>Voice memory</h2><p>Saved edits teach the studio your typical copy length, casing and hashtag use for each platform.</p></section><section class="panel"><div class="tag">Reported results</div><div class="stat">' +
       metrics.length +
       "</div><h2>Retention signals</h2><p>Record average percentage viewed in a moment’s review. Future cuts with similar emotional arcs inherit that signal.</p></section></div>" +
+      (state.examples || [])
+        .map(
+          (e) =>
+            '<section class="panel"><div class="tag">' +
+            esc(e.platform) +
+            " · saved voice edit</div><p><del>" +
+            esc(e.before) +
+            "</del></p><strong>" +
+            esc(e.after) +
+            "</strong></section>",
+        )
+        .join("") +
       metrics
         .map(
           (m) =>

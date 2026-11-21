@@ -52,7 +52,12 @@ def parse_srt(raw):
     return sorted(rows)
 
 
-def rank(rows, feedback):
+def rank(rows, feedback, levels=()):
+    # Median voiced RMS keeps long quiet tails from dominating the delivery signal.
+    loudness = []
+    for a, b, _ in rows:
+        voiced = sorted(v for v in levels[int(a * 5) : int(b * 5) + 1] if v > -55)
+        loudness.append(voiced[len(voiced) // 2] if voiced else None)
     candidates = []
     for i, (start, _, _) in enumerate(rows):
         best = None
@@ -81,6 +86,20 @@ def rank(rows, feedback):
             adjustment = sum(v - 50 for v in outcomes) / (len(outcomes) + 2) * 0.32
             detail = bool(re.search(r"\d|because|because of|क्योंकि|इसलिए", whole, re.I))
             payoff = curve[-1] > curve[0] or hits(lines[-1], "Discovery")
+            spoken = [v for v in loudness[i : j + 1] if v is not None]
+            dynamics = max(spoken) - min(spoken) if spoken else 0
+            unfinished = bool(
+                re.search(
+                    r"(?:^|\s)(?:the|and|because|to|my|of|a|कि|और|लेकिन)$",
+                    lines[-1],
+                    re.I,
+                )
+            )
+            clean_end = (
+                j + 1 == len(rows)
+                or rows[j + 1][0] - rows[j][1] > 0.32
+                or bool(re.search(r"[.!?।]$", lines[-1]))
+            )
             score = (
                 50
                 + min(swing, 3) * 6
@@ -90,6 +109,9 @@ def rank(rows, feedback):
                 + 4 * bool(hits(lines[0], "Curiosity") or hits(lines[0], "Tension"))
                 - abs(30 - duration) * 0.22
                 - 18 * len(FILLER.findall(whole))
+                + min(4, dynamics * 0.35)
+                + 3 * clean_end
+                - 13 * unfinished
                 + adjustment
             )
             if best is not None and score <= best[0]:
@@ -99,6 +121,10 @@ def rank(rows, feedback):
                 low = lines[curve.index(min(curve))].split(". ")[0][:120]
                 high = lines[curve.index(max(curve))].split(". ")[0][:120]
                 reasons.append(f"Emotional low: “{low}”. Emotional high: “{high}”.")
+            if dynamics >= 4:
+                reasons.append(
+                    f"Typical voice level varies by {dynamics:.0f} dB across these lines, adding a change in delivery."
+                )
             if change:
                 reasons.append("The speaker signals a change in understanding.")
             if detail:
@@ -133,6 +159,23 @@ def rank(rows, feedback):
                     score=round(max(1, min(99, score))),
                     reasons=reasons,
                     curve=curve,
+                    waveform=[
+                        round(
+                            max(
+                                levels[
+                                    int((start + duration * k / 20) * 5) : max(
+                                        int((start + duration * k / 20) * 5) + 1,
+                                        int((start + duration * (k + 1) / 20) * 5),
+                                    )
+                                ],
+                                default=-70,
+                            ),
+                            1,
+                        )
+                        for k in range(20)
+                    ]
+                    if levels
+                    else [],
                 ),
             )
         if best:

@@ -20,7 +20,7 @@ from flask import Flask, abort, jsonify, redirect, request, send_file, session
 from editor import refine
 from speech import local_transcribe
 from engine import parse_srt, platform_copy, rank
-from media import captions, probe, render, transcribe
+from media import captions, probe, render, transcribe, source_levels
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
@@ -126,10 +126,20 @@ def memories(who):
     return edits, metrics
 
 
+def rank_recording(pid, source, rows, metrics):
+    cache = DATA / pid / "levels.json"
+    if cache.exists():
+        levels = json.loads(cache.read_text())
+    else:
+        levels = source_levels(source)
+        cache.write_text(json.dumps(levels))
+    return rank(rows, metrics, levels)
+
+
 def insert(who, title, source, rows=None):
     pid = uid()
     (DATA / pid).mkdir()
-    clips = rank(rows, memories(who)[1]) if rows else None
+    clips = rank_recording(pid, source, rows, memories(who)[1]) if rows else None
     with db() as c:
         c.execute(
             "INSERT INTO projects VALUES(?,?,?,?,?,?,?)",
@@ -177,6 +187,9 @@ def studio():
         projects=projects,
         calendar=calendar,
         edits=len(edits),
+        examples=[
+            {k: e[k] for k in ("platform", "before", "after")} for e in edits[:6]
+        ],
         metrics=list(metrics.values()),
         linked=linked,
         sarvam=bool(os.getenv("SARVAM_API_KEY")),
@@ -273,7 +286,7 @@ def process(pid, who, src, rows, lang, cloud):
             raise ValueError("Caption timestamps fall outside the recording.")
         progress("Finding emotional arcs")
         edits, metrics = memories(who)
-        clips = rank(rows, metrics)
+        clips = rank_recording(pid, src, rows, metrics)
         if cloud:
             clips = refine(clips, edits)
         with db() as c:
@@ -365,7 +378,7 @@ def rerank(pid):
     p = project(pid, who)
     if not p["clips"]:
         raise ValueError("Wait for the import to finish.")
-    clips = rank(json.loads(p["rows"]), memories(who)[1])
+    clips = rank_recording(pid, p["source"], json.loads(p["rows"]), memories(who)[1])
     # Keep older cuts addressable for scheduled exports, even when rankings change.
     with db() as c:
         for clip in json.loads(p["clips"]):

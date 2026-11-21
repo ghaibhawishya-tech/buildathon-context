@@ -673,3 +673,19 @@ a:hover {
     padding: 18px;
   }
 }
+
+.mobile-download {
+  display: none;
+}
+@media (max-width: 700px) {
+  .mobile-download {
+    display: block;
+    font-size: 12px;
+  }
+  header {
+    gap: 6px;
+  }
+  header b {
+    margin: 0 2px;
+  }
+}

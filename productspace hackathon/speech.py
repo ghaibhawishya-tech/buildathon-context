@@ -71,7 +71,7 @@ def local_transcribe(path, duration, lang, progress, models):
         words = result.get("result", [])
         group = []
         for word in words:
-            if group and (word["start"] - group[-1]["end"] > 0.65 or len(group) >= 15):
+            if group and (word["start"] - group[-1]["end"] > 0.65 or len(group) >= 55):
                 cues.append(
                     [
                         group[0]["start"],

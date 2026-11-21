@@ -39,14 +39,14 @@ Keep one application process running. Workspaces use a signed browser cookie, so
 ## Demo in two minutes
 
 1. Open **The Rough Cut** and review the first reversal. Play the captioned vertical cut and open its source-timed transcript. Download the MP4 and SRT.
-2. Switch to Instagram, rewrite the copy in a short lowercase voice, then save. Open a different moment on Instagram to see the learned style. Brand memory counts saved edits.
+2. Switch to Instagram to preview shorter on-screen caption phrases, rewrite the copy in a short lowercase voice, then save. Open a different moment on Instagram to see the learned style. Brand memory counts saved edits.
 3. Choose a time in Plan publication. The calendar stores the approved platform and exact copy. Posting is opt-in per clip.
 4. Record the observed average percentage viewed for a clip. Return to Clip studio and re-rank. The rationale shows the retention adjustment, which also applies to subsequent imports.
 5. Import a podcast or video with English or Hindi audio. The same pipeline runs on real uploads. A matching SRT skips transcription. The single-process build accepts up to 512 MiB and three hours per recording. Upload speed, transcript density and host CPU affect processing time.
 
 ## Inside the hardest part
 
-Aftertone evaluates continuous timestamp windows, discards windows crossing a long gap and selects non-overlapping passages. VADER sentiment and Hindi/Hinglish cues describe the emotional trajectory. Discovery language, specificity, a resolving line, duration and promotional filler affect the score. The score is an editorial heuristic on a 1–99 scale. Reported retention modifies the ranking for the same arc with shrinkage for small sample counts. The display gives source evidence for inspection; sarcasm, translation errors and noisy audio still need human judgment.
+Aftertone evaluates continuous timestamp windows, discards windows crossing a long gap and selects non-overlapping passages. VADER sentiment and Hindi/Hinglish cues describe the emotional trajectory. The audio pass measures RMS energy every 200 milliseconds. Per-line changes in delivery, pauses, and unfinished endings also affect selection. Each thumbnail shows the measured audio envelope. Discovery language, specificity, a resolving line, duration and promotional filler affect the score. The score is an editorial heuristic on a 1–99 scale. Reported retention modifies the ranking for the same arc with shrinkage for small sample counts. The display gives source evidence for inspection; sarcasm, translation errors and noisy audio still need human judgment.
 
 Brand memory learns platform-specific word count, casing and hashtag choices from edits. With Sarvam enabled, recent before-and-after examples also condition an editorial pass. Orthogonal export and publishing steps keep a download independent of any social account.
 
