@@ -1,0 +1,347 @@
+main:has(.studio-cover) {
+  --gutter: max(4.5vw, 20px);
+  --mast-height: 72px;
+  padding-top: 0;
+  max-width: none;
+}
+html {
+  scroll-behavior: smooth;
+}
+.studio-cover {
+  margin-inline: calc(-1 * var(--gutter));
+  --frame-height: min(790px, calc(100svh - var(--mast-height)));
+  min-block-size: calc(var(--frame-height) + 145px);
+}
+.cover-frame {
+  position: sticky;
+  top: var(--mast-height);
+  isolation: isolate;
+  min-height: var(--frame-height);
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  background: #2b1710;
+  color: #fffbf3;
+}
+.cover-photo {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 63% 44%;
+}
+.cover-frame::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    linear-gradient(90deg, #190c08e8 0%, #1f110bb0 35%, #22130a1a 75%),
+    linear-gradient(0deg, #170e0cd9, transparent 52%);
+}
+.cover-copy {
+  margin: 0 6vw;
+  padding: clamp(30px, 8vh, 112px) 0 clamp(32px, 7vh, 87px);
+}
+.cover-copy h1 {
+  line-height: 0.9;
+  font-size: clamp(66px, 10vw, 165px);
+  letter-spacing: -0.076em;
+  margin-bottom: 22px;
+}
+.cover-copy .title-mask em {
+  color: #ffd0b0;
+}
+.cover-copy p {
+  font: 400 clamp(19px, 2.2vw, 30px) / 1.22 var(--display);
+  max-width: 32ch;
+}
+.cover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 21px;
+  align-items: center;
+  margin-top: 27px;
+}
+.start-cut,
+.cover-film {
+  color: #fffaf2;
+  border: 1px solid #e1b49cab;
+  padding: 10px 14px;
+  font-size: 13px;
+  border-radius: 2px;
+}
+.start-cut {
+  background: #f8e5d5;
+  color: #28201a;
+  font-weight: 700;
+}
+.start-cut span {
+  margin-left: 14px;
+}
+.start-cut:hover,
+.cover-film:hover {
+  text-decoration: none;
+  background: #fff4e9;
+  color: #28201a;
+}
+#clip-request,
+#edit-desk {
+  scroll-margin-top: calc(var(--mast-height) + 20px);
+}
+.request-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  gap: clamp(22px, 5vw, 84px);
+  align-items: center;
+  padding: clamp(26px, 5vw, 78px) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.request-intro h2 {
+  font-size: clamp(38px, 5vw, 81px);
+  line-height: 0.95;
+  margin-bottom: 13px;
+}
+.request-intro p {
+  color: var(--muted);
+  max-width: 36ch;
+}
+.text-button {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0;
+  margin-top: 14px;
+  color: var(--rust);
+}
+.composer {
+  background: #2d241e;
+  color: #fff9ef;
+  border: 1px solid #503b2f;
+  padding: clamp(15px, 2.7vw, 34px);
+  border-radius: 14px;
+  box-shadow:
+    0 18px 34px #4626101c,
+    inset 0 1px 0 #ffffff19;
+  transition:
+    box-shadow 260ms var(--ease),
+    border-color 260ms var(--ease);
+}
+.composer:focus-within {
+  border-color: #bd694b;
+  box-shadow:
+    0 0 0 3px #bc674744,
+    0 18px 34px #4626102e;
+}
+.composer > label {
+  margin: 0 0 7px;
+  color: #f2c5af;
+  font-size: 12px;
+}
+.composer-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 1px 0 8px;
+  border-bottom: 1px solid #ffffff36;
+}
+.composer-field span {
+  color: #eaa686;
+  font-size: 23px;
+}
+.composer-field input {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: #fff9ef;
+  font: 400 clamp(19px, 3vw, 29px) / 1.22 var(--display);
+  padding: 6px 3px;
+  min-width: 0;
+}
+.composer-field input::placeholder {
+  color: #c6b2a3;
+}
+.composer-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.composer .quicksettings {
+  gap: 12px;
+}
+.composer .quicksettings label {
+  color: #f2e4d9;
+  margin: 0;
+}
+.composer .quicksettings input,
+.composer .quicksettings select {
+  background: #42332b;
+  border-color: #836a5b;
+  color: #fff9ef;
+}
+.composer .quicksettings select option {
+  color: #fff9ef;
+}
+.composer-send {
+  background: #f6d1b7;
+  color: #33221b;
+  white-space: nowrap;
+}
+.composer-send:hover {
+  background: #ffead7;
+  color: #33221b;
+}
+.composer-send span {
+  margin-left: 11px;
+}
+.composer output {
+  display: block;
+  color: #f6cbaf;
+  margin-top: 9px;
+  font-size: 12px;
+}
+.composer output:empty {
+  display: none;
+}
+.workflow {
+  padding: clamp(23px, 5vw, 66px) 0;
+  border-bottom: 1px solid var(--ink);
+}
+.workflow > h2 {
+  font-size: clamp(31px, 4.2vw, 60px);
+  margin-bottom: 16px;
+}
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(12px, 2.8vw, 36px);
+}
+.workflow-step h3 {
+  font-size: clamp(25px, 3vw, 41px);
+  margin-top: 12px;
+}
+.workflow-step p {
+  color: var(--muted);
+  max-width: 36ch;
+}
+.workflow-still {
+  background: #29231e;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.workflow-still img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.workflow-export img {
+  max-height: 100%;
+  height: auto;
+  width: auto;
+  max-width: 100%;
+  aspect-ratio: 9/16;
+  object-fit: cover;
+  align-self: start;
+}
+.workflow-export .workflow-still {
+  grid-template-rows: minmax(0, 1fr);
+}
+.workflow-export img {
+  height: 100%;
+}
+.desk-help {
+  color: var(--muted);
+  margin: -4px 0 18px;
+  max-width: 72ch;
+}
+.audio-guide {
+  background: #efe2d6;
+  padding: 10px 12px;
+  border: 1px solid #d7bfae;
+}
+.audio-guide summary {
+  color: var(--rust);
+}
+.audio-guide button {
+  margin: 6px 0;
+}
+@media (max-width: 800px) {
+  main:has(.studio-cover) {
+    --mast-height: 93px;
+  }
+  .studio-cover {
+    --frame-height: max(480px, calc(82svh - var(--mast-height)));
+    min-block-size: calc(var(--frame-height) + 85px);
+  }
+  .cover-photo {
+    object-position: 60% 37%;
+  }
+  .cover-frame::after {
+    background: linear-gradient(
+      0deg,
+      #1a0e09f2 9%,
+      #20120e95 45%,
+      #25171115 100%
+    );
+  }
+  .cover-copy {
+    margin-inline: 6vw;
+  }
+  .cover-copy h1 {
+    font-size: clamp(51px, 11.8vw, 89px);
+  }
+  .request-section {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+@media (max-width: 550px) {
+  .workflow-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .workflow-step {
+    display: grid;
+    grid-template-columns: 105px minmax(0, 1fr);
+    column-gap: 13px;
+  }
+  .workflow-still {
+    grid-row: span 2;
+    aspect-ratio: 1;
+    align-self: center;
+  }
+  .workflow-step h3 {
+    margin-top: 0;
+    font-size: 25px;
+  }
+  .workflow-step p {
+    font-size: 13px;
+  }
+  .composer .quicksettings {
+    gap: 7px;
+  }
+  .composer .quicksettings input {
+    width: 49px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .studio-cover {
+    min-block-size: 0;
+  }
+  .cover-frame {
+    position: relative;
+    top: 0;
+  }
+}

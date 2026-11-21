@@ -1,5 +1,5 @@
-Direction — Editorial magazine with an editing desk below the fold.
-Motion — Editorial cinematic. Use a long arrival and short control feedback.
-Signature — A masked headline and still reveal together like an opening title.
-Support — Use a film-frame wipe between views, a playback-linked playhead, and quiet hover feedback.
-Stack — Native CSS and same-document View Transitions fit the existing browser app.
+Direction — Editorial magazine with a full-bleed film cover and a practical editing desk.
+Motion — Editorial cinematic. Use long cover motion and short control feedback.
+Signature — ScrollTrigger draws the full-bleed cover into an inset film frame on the way to the request composer.
+Support — Illustrate the workflow with real Aftertone frames and reveal the edit desk in reading order.
+Stack — GSAP ScrollTrigger for cover choreography and native CSS for interaction and reduced motion.

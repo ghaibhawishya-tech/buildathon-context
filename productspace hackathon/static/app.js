@@ -136,11 +136,47 @@ function cutTimeline(clips) {
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 let studioIntroduced = false;
 
-function motionStage() {
-  return `<figure class="hero-feature">
-    <div class="feature-image"></div>
-    ${state.films ? '<button class="feature-play" data-page="brief" data-film="true"><span class="play-icon" aria-hidden="true">▶</span><span>The editorial film <small>00:36</small></span><span aria-hidden="true">↗</span></button>' : ""}
-  </figure>`;
+function studioCover() {
+  return `<section class="studio-cover ${studioIntroduced ? "" : "arrive"}">
+    <div class="cover-frame">
+      <img class="cover-photo" src="/static/editorial-studio.webp" alt="" fetchpriority="high">
+      <div class="cover-copy">
+        <h1 aria-label="Find the story inside the story."><span class="title-mask" aria-hidden="true"><span>Find the story</span></span><span class="title-mask" aria-hidden="true"><em>inside the story.</em></span></h1>
+        <p>Turn long recordings into short clips with a beginning, a turn, and a reason to watch.</p>
+        <div class="cover-actions"><a class="start-cut" href="#clip-request">Make a clip <span aria-hidden="true">↓</span></a>
+        ${state.films ? '<button class="cover-film" data-page="brief" data-film="true">▶ &nbsp; Watch the film</button>' : ""}</div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function workflow() {
+  const steps = [
+    [
+      "select",
+      "Find a moment",
+      "Aftertone scans the transcript and audio for passages that work as short clips.",
+      "Illustrated waveform with a highlighted clip range",
+    ],
+    [
+      "review",
+      "Review the cut",
+      "Open a suggestion to hear the original recording and see why the segment was picked.",
+      "Illustrated review with opening line, turn and close",
+    ],
+    [
+      "export",
+      "Finalize and export",
+      "Approve a cut to make a captioned vertical MP4, then download it or plan a post.",
+      "Vertical Aftertone export with animated captions and a waveform",
+    ],
+  ];
+  return `<section class="workflow" aria-labelledby="workflow-title"><h2 id="workflow-title">From recording to short</h2><div class="workflow-grid">${steps
+    .map(
+      ([id, title, copy, alt]) => `
+    <article class="workflow-step workflow-${id}"><div class="workflow-still"><img src="/static/example-${id}.webp" alt="${alt}" loading="lazy"></div><h3>${title}</h3><p>${copy}</p></article>`,
+    )
+    .join("")}</div></section>`;
 }
 
 function navigate(destination, playFilm = false) {
@@ -148,7 +184,7 @@ function navigate(destination, playFilm = false) {
   const update = () => {
     page = destination;
     paint();
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, behavior: "instant" });
     if (playFilm) {
       const film = document.querySelector(".motionfilm video");
       film?.play().catch(() => {});
@@ -162,6 +198,7 @@ function navigate(destination, playFilm = false) {
 }
 
 function paint() {
+  window.mountCoverMotion?.();
   document.querySelectorAll("nav button").forEach((b) => {
     const selected = b.dataset.page === page;
     b.classList.toggle("active", selected);
@@ -269,18 +306,19 @@ function paint() {
     (c) => filter === "All arcs" || filter === c.arc,
   );
   $("main").innerHTML =
-    `<section class="intake ${studioIntroduced ? "" : "arrive"}"><div class="hero-inner">
-      <span class="section-label">The clipping studio</span>
-      <h1 aria-label="Find the story inside the story."><span class="title-mask" aria-hidden="true"><span>Find the story</span></span><span class="title-mask" aria-hidden="true"><em>inside the story.</em></span></h1>
-      <p>Turn long recordings into short clips with a beginning, a turn, and a reason to watch.</p>
-      <form id="quick"><label class="sr-only" for="linkbox">Recording link</label>
-        <div class="linkrow"><input id="linkbox" name="link" type="url" placeholder="Paste a YouTube or media link" required><button class="primary">Find clips <span aria-hidden="true">↗</span></button></div>
-        <div class="quicksettings">
-          <label>Duration <input type="number" name="seconds" min="30" max="180" value="30" required> sec</label>
-          <label>Speech <select name="language"><option value="en-IN">English</option><option value="hi-IN">Hindi</option></select></label>
+    `${studioCover()}<section id="clip-request" class="request-section" aria-labelledby="request-title">
+      <div class="request-intro"><h2 id="request-title">What are we cutting?</h2><p>Send a YouTube link or a direct audio or video URL. Pick a duration and we’ll suggest passages that fit.</p>
+      <button type="button" class="text-button" id="demo-jump">Explore the demo clips ↓</button></div>
+      <form id="quick" class="composer">
+        <label for="linkbox">Recording link</label>
+        <div class="composer-field"><span aria-hidden="true">↗</span><input id="linkbox" name="link" type="url" placeholder="Paste a YouTube or media link" required></div>
+        <div class="composer-tools">
+          <div class="quicksettings"><label>Length <input type="number" name="seconds" min="30" max="180" value="30" required> sec</label>
+          <label>Language <select name="language"><option value="en-IN">English</option><option value="hi-IN">Hindi</option></select></label></div>
+          <button class="primary composer-send">Find clips <span aria-hidden="true">↑</span></button>
         </div><output id="quickstatus" role="status"></output>
       </form>
-      </div>${motionStage()}</section><section class="sourcebar"><div><small class="tag">` +
+    </section>${workflow()}<section id="edit-desk" class="sourcebar"><div><small class="tag">` +
     source +
     '</small><select id="projects" aria-label="Source recording">' +
     options +
@@ -288,9 +326,9 @@ function paint() {
     (project.status === "Ready"
       ? '<button class="outline" id="listen">▶ Play source</button>'
       : "") +
-    '<div id="player"></div></section><div class="listhead"><h2>Editorial directions <span>' +
-    project.clips.length +
-    '</span></h2><select id="filter" aria-label="Filter emotional arcs">' +
+    '<div id="player"></div></section><div class="listhead"><h2>Suggested clips <span>' +
+    cards.length +
+    '</span></h2><select id="filter" aria-label="Filter by story type">' +
     ["All arcs", ...new Set(project.clips.map((c) => c.arc))]
       .map(
         (x) =>
@@ -301,7 +339,7 @@ function paint() {
           "</option>",
       )
       .join("") +
-    '</select></div><div class="cards">' +
+    '</select></div><p class="desk-help">Each bar marks where a suggested clip begins and ends in the recording. Open a clip to listen and see why it was picked. The score ranks the suggestions by story and delivery.</p><div class="cards">' +
     (cards
       .map(
         (c, i) =>
@@ -328,7 +366,7 @@ function paint() {
           c.score +
           '</strong><small>cut score</small></div><button class="action" data-cut="' +
           c.id +
-          '" aria-label="Review direction ' +
+          '" aria-label="Review clip ' +
           (i + 1) +
           '">↗</button></div></article>',
       )
@@ -342,7 +380,22 @@ function paint() {
     (state.metrics.length
       ? '<div class="actions"><button class="outline" id="rerank">Re-rank using retention</button></div>'
       : "");
+  window.mountCoverMotion?.(document.querySelector(".studio-cover"));
   studioIntroduced = true;
+  $("demo-jump").onclick = async () => {
+    try {
+      const demo = project.demo ? project : await api("/api/demo", {});
+      if (demo.id !== project.id) {
+        filter = "All arcs";
+        await refresh(demo.id);
+      }
+      $("edit-desk").scrollIntoView({
+        behavior: reducedMotion.matches ? "instant" : "smooth",
+      });
+    } catch (error) {
+      message(error.message);
+    }
+  };
   $("quick").onsubmit = async (e) => {
     e.preventDefault();
     const form = e.currentTarget,
@@ -355,7 +408,7 @@ function paint() {
       await refresh(id);
       document.querySelector(".sourcebar").scrollIntoView({ block: "start" });
     } catch (error) {
-      $("quickstatus").textContent = error.message;
+      form.querySelector("output").textContent = error.message;
     } finally {
       btn.disabled = false;
     }
@@ -366,7 +419,7 @@ function paint() {
     toolbar.innerHTML =
       '<label>Cut length <input type="number" aria-label="New cut length" min="30" max="180" value="' +
       project.seconds +
-      '" required> seconds</label><button class="outline">Update directions</button>';
+      '" required> seconds</label><button class="outline">Find clips at this length</button>';
     document.querySelector(".listhead").after(toolbar);
     if (cards.length) {
       const board = document.createElement("div");
@@ -448,7 +501,7 @@ function review(id) {
     stamp(c.start) +
     " — " +
     stamp(c.end) +
-    '</small><h2>Direction review</h2></div><button class="close" aria-label="Close">×</button></div><div class="reviewgrid"><div><video id="preview" controls preload="metadata" poster="/static/cover.jpg"></video><div class="actions"><a id="mp4" class="primary" href="' +
+    '</small><h2>Clip review</h2></div><button class="close" aria-label="Close">×</button></div><div class="reviewgrid"><div><video id="preview" controls preload="metadata" poster="/static/cover.jpg"></video><div class="actions"><a id="mp4" class="primary" href="' +
     cuturl("/export/mp4?download=1") +
     '">↓ MP4</a><a id="srt" class="outline" href="' +
     cuturl("/export/srt") +
@@ -479,7 +532,7 @@ function review(id) {
           '<button class="chip" data-platform="' + p + '">' + p + "</button>",
       )
       .join("") +
-    '</div><label for="copy">Platform copy</label><textarea id="copy" maxlength="2000"></textarea><button class="outline" id="save">Save voice edit</button><details><summary>Plan publication</summary><label>Local date and time<input id="when" type="datetime-local"></label><div id="publishopts"></div><button class="primary" id="schedule">Add to calendar</button></details><details><summary>Record performance</summary><label>Average percentage viewed<input type="number" id="retention" min="0" max="100" placeholder="e.g. 72"></label><button class="outline" id="learn">Save retention</button></details><p class="notice" role="status"></p></div></div>';
+    '</div><label for="copy">Platform copy</label><textarea id="copy" maxlength="2000"></textarea><button class="outline" id="save">Save writing style</button><details><summary>Plan publication</summary><label>Local date and time<input id="when" type="datetime-local"></label><div id="publishopts"></div><button class="primary" id="schedule">Add to calendar</button></details><details><summary>Record performance</summary><label>Average percentage viewed<input type="number" id="retention" min="0" max="100" placeholder="e.g. 72"></label><button class="outline" id="learn">Save retention</button></details><p class="notice" role="status"></p></div></div>';
   const beats = document.createElement("section");
   beats.className = "beatlist";
   const mid =
@@ -562,12 +615,13 @@ function review(id) {
   const approval = document.createElement("button");
   approval.id = "finalize";
   approval.className = "primary";
-  approval.textContent = "Finalize this direction →";
+  approval.textContent = "Approve clip & unlock exports →";
   $("mp4").parentElement.before(approval);
   bind("finalize", async () => {
     await api(cuturl("/finalize"), {});
     current.final = true;
     choosePlatform();
+    voiceAvailability();
     if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
       transport.animate(
         [
@@ -577,21 +631,52 @@ function review(id) {
         650,
       );
     await refresh();
-    message("Direction finalized. Your captioned export is ready to preview.");
+    message("Clip approved. Preview or download the captioned export.");
   });
-  if (state.elevenlabs) {
-    const button = document.createElement("button");
-    button.className = "outline";
-    button.id = "voice";
-    button.textContent = "Generate ElevenLabs voiceover";
-    button.title =
-      "Send the finalized transcript to ElevenLabs and download a narrated MP4";
-    $("srt").after(button);
-    bind("voice", async () => {
-      const { url } = await api(cuturl("/voice"), { platform });
-      window.location.assign(url);
-    });
+  const audioGuide = document.createElement("details");
+  audioGuide.className = "audio-guide";
+  audioGuide.innerHTML = `<summary>Clip audio and ElevenLabs</summary>
+    <p><strong>Original audio.</strong> The player and standard MP4 use the sound from your recording.</p>
+    <p><strong>Optional AI narration.</strong> ElevenLabs reads this clip’s transcript in a synthetic voice. Aftertone syncs it to the clip and creates a separate MP4 with the new voice in place of the original track.</p>
+    <p><strong>Hear an example.</strong> George is the ElevenLabs voice in this sample from the project brief.</p>
+    <button type="button" class="outline" id="voice-sample">▶ Play ElevenLabs sample</button>
+    <audio preload="none" src="/static/brief.mp3"></audio>
+    ${state.elevenlabs ? '<button class="outline" id="voice">Generate a narrated MP4</button><p id="voice-hint"></p>' : "<p>Custom voiceovers need an ElevenLabs API key configured on this studio.</p>"}`;
+  $("mp4").parentElement.after(audioGuide);
+  const sample = audioGuide.querySelector("audio");
+  const sampleButton = $("voice-sample");
+  sampleButton.onclick = async () => {
+    try {
+      if (sample.paused) await sample.play();
+      else sample.pause();
+    } catch (error) {
+      message(
+        "The sample could not play. Try again or listen in Project brief.",
+      );
+    }
+  };
+  sample.onplay = () => {
+    preview.pause();
+    sampleButton.textContent = "Pause ElevenLabs sample";
+  };
+  sample.onpause = sample.onended = () => {
+    sampleButton.textContent = "▶ Play ElevenLabs sample";
+  };
+  preview.addEventListener("play", () => sample.pause());
+  function voiceAvailability() {
+    if (!state.elevenlabs) return;
+    $("voice").disabled = !current.final;
+    $("voice-hint").textContent = current.final
+      ? "This sends the approved transcript to ElevenLabs and may use credits."
+      : "Approve the clip to generate an alternate voiceover.";
   }
+  bind("voice", async () => {
+    message("Generating narration…");
+    const { url } = await api(cuturl("/voice"), { platform });
+    window.location.assign(url);
+    message("Narrated MP4 ready.");
+  });
+  voiceAvailability();
   choosePlatform();
   bind("save", async () => {
     await api(cuturl("/edit"), { platform, copy: $("copy").value });
