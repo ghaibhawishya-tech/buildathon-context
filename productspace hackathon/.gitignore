@@ -1,0 +1,6 @@
+.runtime/
+.venv/
+data/
+.env
+__pycache__/
+*.zip
