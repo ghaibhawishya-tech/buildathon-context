@@ -6,3 +6,4 @@ python-dotenv>=1,<2
 vaderSentiment==3.3.2
 vosk>=0.3.44,<0.4
 yt-dlp>=2025.10.22
+Pillow>=11.3,<13
