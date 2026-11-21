@@ -1,6 +1,7 @@
 """Public media URLs and canonical YouTube watch links."""
 
 import ipaddress
+import json
 import re
 import socket
 import subprocess
@@ -45,65 +46,132 @@ def checked(url):
     return p
 
 
+def youtube_failure(details):
+    details = details.casefold()
+    if any(
+        phrase in details
+        for phrase in ("max-filesize", "larger than the maximum", "max filesize")
+    ):
+        return "This YouTube download exceeds Aftertone’s 512 MiB limit. Try a shorter recording or upload a smaller copy."
+    if any(
+        phrase in details
+        for phrase in (
+            "confirm you’re not a bot",
+            "confirm you're not a bot",
+            "sign in",
+            "private video",
+            "members-only",
+            "age-restricted",
+        )
+    ):
+        return "YouTube requires sign-in or restricted access for this download. Try another public video or upload your copy."
+    if any(
+        phrase in details
+        for phrase in (
+            "does not pass filter",
+            "does not pass the filter",
+            "is_live",
+            "live event will begin",
+            "live stream is offline",
+        )
+    ):
+        return "Choose a finished YouTube recording no longer than three hours."
+    if any(
+        phrase in details
+        for phrase in (
+            "video unavailable",
+            "has been removed",
+            "not made this video available",
+        )
+    ):
+        return "This video is unavailable to the studio. Try another public video or upload your copy."
+    if any(
+        phrase in details
+        for phrase in (
+            "timed out",
+            "connection reset",
+            "temporarily unavailable",
+            "http error 429",
+        )
+    ):
+        return "The YouTube download was interrupted. Try the link again or upload your copy."
+    if (
+        "requested format is not available" in details
+        or "challenge solving failed" in details
+    ):
+        return "YouTube did not provide a playable download for this link. Try another public video or upload your copy."
+    return "The YouTube download failed. Try another public video or upload your copy."
+
+
+def fetch_youtube(video, path):
+    with tempfile.TemporaryDirectory(dir=path.parent) as work:
+        root = Path(work).resolve()
+        encoder = root / ("ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
+        try:
+            encoder.symlink_to(FF)
+        except OSError:
+            shutil.copy2(FF, encoder)
+        receipt = root / "download.json"
+        runtime = ["--js-runtimes", "node"] if shutil.which("node") else []
+        command = [
+            sys.executable,
+            "-m",
+            "yt_dlp",
+            "--ignore-config",
+            "--no-playlist",
+            "--no-cache-dir",
+            "--no-part",
+            "--no-quiet",
+            "--no-progress",
+            "--max-filesize",
+            str(MAX_BYTES),
+            "--match-filters",
+            "duration <= 10800 & !is_live",
+            "--socket-timeout",
+            "20",
+            "--retries",
+            "1",
+            *runtime,
+            "--ffmpeg-location",
+            str(encoder),
+            "--merge-output-format",
+            "mp4",
+            "-S",
+            "res:480",
+            "-f",
+            "bestvideo[height<=720][ext=mp4][protocol=https]+bestaudio[ext=m4a][protocol=https]/best[height<=720][protocol=https]/bestvideo[height<=720][protocol=https]+bestaudio[protocol=https]",
+            "-o",
+            str(root / "recording.%(ext)s"),
+            "--print-to-file",
+            'after_move:{"title":%(title)j,"path":%(filepath)j}',
+            str(receipt),
+            "https://www.youtube.com/watch?v=" + video,
+        ]
+        try:
+            result = subprocess.run(
+                command, capture_output=True, text=True, timeout=300
+            )
+        except subprocess.TimeoutExpired:
+            raise ValueError(
+                "The YouTube download took too long. Try a shorter recording or upload your copy."
+            ) from None
+        if result.returncode or not receipt.is_file():
+            raise ValueError(youtube_failure(result.stderr + "\n" + result.stdout))
+        info = json.loads(receipt.read_text())
+        downloaded = Path(info["path"])
+        if downloaded.parent != root or not downloaded.is_file():
+            raise ValueError("The YouTube download did not produce a playable file.")
+        if downloaded.stat().st_size > MAX_BYTES:
+            raise ValueError(youtube_failure("max-filesize"))
+        downloaded.replace(path)
+        return str(info["title"])[:150]
+
+
 def fetch(url, path):
     checked(url)
     video = youtube_id(url)
     if video:
-        with tempfile.TemporaryDirectory(dir=path.parent) as work:
-            root = Path(work).resolve()
-            encoder = root / ("ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
-            try:
-                encoder.symlink_to(FF)
-            except OSError:
-                shutil.copy2(FF, encoder)
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "yt_dlp",
-                    "--ignore-config",
-                    "--no-playlist",
-                    "--no-cache-dir",
-                    "--no-part",
-                    "--max-filesize",
-                    "512M",
-                    "--match-filters",
-                    "duration <= 10800 & !is_live",
-                    "--socket-timeout",
-                    "20",
-                    "--retries",
-                    "1",
-                    "--ffmpeg-location",
-                    str(encoder),
-                    "--merge-output-format",
-                    "mp4",
-                    "-f",
-                    "best[height<=720][protocol=https]/bestvideo[height<=720][ext=mp4][protocol=https]+bestaudio[ext=m4a][protocol=https]/bestvideo[height<=720]+bestaudio",
-                    "-o",
-                    str(root / "recording.%(ext)s"),
-                    "--print",
-                    "after_move:title",
-                    "https://www.youtube.com/watch?v=" + video,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=300,
-            )
-            files = [
-                f
-                for f in root.glob("recording.*")
-                if f.name.count(".") == 1 and f.stat().st_size <= MAX_BYTES
-            ]
-            if result.returncode or len(files) != 1:
-                raise ValueError(
-                    "YouTube could not supply this recording within the size limit. Try a direct media link or upload the file."
-                )
-            files[0].replace(path)
-            return (
-                result.stdout.strip().splitlines()[-1][:150]
-                if result.stdout.strip()
-                else "YouTube recording"
-            )
+        return fetch_youtube(video, path)
     deadline = time.monotonic() + 240
     for _ in range(6):
         parsed = checked(url)

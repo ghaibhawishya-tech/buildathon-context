@@ -1,5 +1,7 @@
-FROM python:3.12-slim
-RUN apt-get update && apt-get install -y --no-install-recommends curl fonts-dejavu-core fonts-noto-core && rm -rf /var/lib/apt/lists/*
+FROM node:22-bookworm-slim AS youtube-runtime
+FROM python:3.12-slim-bookworm
+COPY --from=youtube-runtime /usr/local/bin/node /usr/local/bin/node
+RUN apt-get update && apt-get install -y --no-install-recommends curl libstdc++6 fonts-dejavu-core fonts-noto-core && rm -rf /var/lib/apt/lists/*
 WORKDIR /studio
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
