@@ -53,7 +53,7 @@ def parse_srt(raw):
     return sorted(rows)
 
 
-def rank(rows, feedback, levels=(), target=30, source_duration=None):
+def rank(rows, feedback, levels=(), target=30, source_duration=None, reactions=()):
     duration_available = source_duration if source_duration is not None else rows[-1][1]
     if duration_available < target:
         raise ValueError(
@@ -71,6 +71,13 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
         for a, b, _ in rows
         for t in (a, b - target)
     }
+    lead = min(30, max(20, target - 15))
+    reactions = [peak for peak in reactions if peak["at"] < duration_available]
+    reaction_times = [peak["at"] for peak in reactions]
+    anchors.update(
+        max(0, min(peak["at"] - lead, duration_available - target))
+        for peak in reactions
+    )
     ends = []
     for _, b, _ in rows:
         ends.append(max(b, ends[-1] if ends else 0))
@@ -124,6 +131,25 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
             or rows[j + 1][0] - rows[j][1] > 0.32
             or bool(re.search(r"[.!?।]$", lines[-1]))
         )
+        nearby = reactions[
+            bisect_left(reaction_times, start + 4) : bisect_left(
+                reaction_times, end - 4
+            )
+        ]
+        reaction = max(
+            nearby,
+            key=lambda peak: (
+                peak["strength"]
+                * (1 - min(0.7, abs(peak["at"] - start - lead) / target))
+            ),
+            default=None,
+        )
+        chat_bonus = (
+            reaction["strength"]
+            * (1 - min(0.7, abs(reaction["at"] - start - lead) / target))
+            if reaction
+            else 0
+        )
         score = (
             50
             + min(swing, 3) * 6
@@ -139,9 +165,17 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
             - 15 * (end < rows[j][1] - 0.08)
             - 13 * unfinished
             + adjustment
+            + chat_bonus
         )
 
         reasons = []
+        if reaction:
+            timestamp = int(reaction["at"])
+            terms = ", ".join(reaction["terms"])
+            reasons.append(
+                f"Chat reacted near {timestamp // 60}:{timestamp % 60:02d} with {reaction['count']} messages in 5 seconds"
+                + (f" and repeated {terms}." if terms else ".")
+            )
         if swing:
             low = lines[curve.index(min(curve))].split(". ")[0][:120]
             high = lines[curve.index(max(curve))].split(". ")[0][:120]
@@ -189,6 +223,7 @@ def rank(rows, feedback, levels=(), target=30, source_duration=None):
                 score=round(max(1, min(99, score))),
                 reasons=reasons,
                 curve=curve,
+                chat=reaction,
                 waveform=[
                     round(
                         max(

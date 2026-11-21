@@ -65,3 +65,11 @@ Official references: [Vosk models](https://alphacephei.com/vosk/models), [Sarvam
 ## Motion films
 
 Project brief includes a 36-second Jessica-narrated film, its vertical adaptation, and a 30-second studio export. The source project, timed script, storyboard, font licenses, and rendering commands are in [motion/README.md](motion/README.md). New source exports use kinetic caption highlights and audio-only recordings include a live waveform.
+
+## Clip livestream replays with chat
+
+Open **Use livestream replay chat** in the link or upload form. Attach a YouTube replay JSONL file or a CSV with `seconds,text` columns and optional `author,id` columns. Each timestamp is in seconds from the beginning of the full recording. For a selected YouTube section, Aftertone shifts the timestamps to match that section.
+
+Aftertone compares five-second chat bins, deduplicates known senders within a bin, and looks for unusual message volume or shared reactions such as LOL, POG and 😂. Add channel-specific words in **Extra reaction terms**. A 40-second cut targets roughly 25 seconds before the peak and 15 seconds after. Story quality and recording boundaries can move the final window. Review the evidence and approve your picks to save or export vertical 9:16 MP4s.
+
+Raw messages and author IDs are processed in memory. Aftertone stores only reaction summaries. If Sarvam is enabled, the editorial request includes the timestamp and message count for candidate clips with a chat spike. It does not send raw chat or author IDs. Replay import uses an existing chat export. Recording and buffering an active stream requires a separate live capture connection.

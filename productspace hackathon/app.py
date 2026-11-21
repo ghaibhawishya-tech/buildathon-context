@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, redirect, request, send_file, session
 
 from narration import narrated
+from chat import MAX_CHAT_BYTES, chat_peaks
 from sources import fetch, checked, youtube_id
 from editor import refine
 from speech import local_transcribe
@@ -159,7 +160,9 @@ def rank_recording(pid, source, rows, metrics, target=30):
     else:
         levels = source_levels(source)
         cache.write_text(json.dumps(levels))
-    return rank(rows, metrics, levels, target, probe(source)[0])
+    chat_cache = DATA / pid / "chat-peaks.json"
+    reactions = json.loads(chat_cache.read_text()) if chat_cache.is_file() else []
+    return rank(rows, metrics, levels, target, probe(source)[0], reactions)
 
 
 def insert(who, title, source, rows=None):
@@ -301,6 +304,16 @@ def ingest():
         if srt and srt.filename
         else None
     )
+    chat_file = request.files.get("chat")
+    reactions = None
+    if chat_file and chat_file.filename:
+        reactions = chat_peaks(
+            chat_file.read(MAX_CHAT_BYTES + 1),
+            chat_file.filename,
+            request.form.get("chat_terms", ""),
+            offset=window[0] if window else 0,
+            end=window[1] if window else None,
+        )
     cloud = request.form.get("sarvam") == "on"
     if cloud and not os.getenv("SARVAM_API_KEY"):
         raise ValueError(
@@ -315,6 +328,8 @@ def ingest():
             who, "Linked recording" if link else Path(media.filename).stem[:150], ""
         )
         src = DATA / pid / "source"
+        if reactions is not None:
+            (DATA / pid / "chat-peaks.json").write_text(json.dumps(reactions))
         if media:
             media.save(src)
         lang = request.form.get("language", "unknown")
@@ -611,6 +626,7 @@ def download():
             "speech.py",
             "app.py",
             "sources.py",
+            "chat.py",
             "kinetic.py",
             "narration.py",
             ".env.example",

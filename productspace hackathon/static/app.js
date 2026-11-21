@@ -136,6 +136,15 @@ function cutTimeline(clips) {
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 let studioIntroduced = false;
 
+function chatOptions() {
+  return `<details class="composer-option chat-options"><summary>Use livestream replay chat</summary>
+    <p>Attach YouTube replay JSONL or a CSV with <code>seconds,text</code> columns. Use elapsed time from the original stream, even when analyzing just one section.</p>
+    <label>Replay chat file<input name="chat" type="file" accept=".csv,.json,.jsonl,.ndjson"></label>
+    <label>Extra reaction terms <input name="chat_terms" placeholder="e.g. insane, no way, ओ भाई" maxlength="360"></label>
+    <p>Aftertone counts reactions like LOL, POG and 😂 locally. Try a 40-second clip for about 25 seconds before the spike and 15 after.</p>
+  </details>`;
+}
+
 function studioCover() {
   return `<section class="studio-cover ${studioIntroduced ? "" : "arrive"}">
     <div class="cover-frame">
@@ -167,7 +176,7 @@ function workflow() {
     [
       "export",
       "Finalize and export",
-      "Approve a cut to make a captioned vertical MP4, then download it or plan a post.",
+      "Approve a cut to make a captioned 9:16 vertical MP4, then download it or plan a post.",
       "Vertical Aftertone export with animated captions and a waveform",
     ],
   ];
@@ -325,6 +334,7 @@ function paint() {
           <p>Enter a start time to fetch just that section. The timeline starts at zero for the selected section.</p>
           <div class="quicksettings"><label>Start <input class="window-start" name="window_start" placeholder="12:30:00" aria-label="Section start time"></label><label>Analyze <input type="number" name="window_minutes" min="3" max="15" value="10"> min</label></div>
         </details>
+        ${chatOptions()}
         <details class="composer-option"><summary>Sarvam AI for transcription and ranking</summary>
           ${state.sarvam ? '<label class="checkbox"><input type="checkbox" name="sarvam"> Use Sarvam for this import</label>' : "<p>Set SARVAM_API_KEY in the server’s .env file and restart to enable Sarvam.</p>"}
           <p>Sarvam turns speech into timed text, then reviews the strongest candidates and drafts platform copy. Audio and relevant transcript text are sent to Sarvam when enabled.</p>
@@ -368,6 +378,7 @@ function paint() {
           bars(c) +
           '</div></div><div><div class="tag">' +
           esc(c.arc) +
+          (c.chat ? " · Chat reaction" : "") +
           (c.final ? " · Saved" : "") +
           "</div><h3>" +
           esc(c.title) +
@@ -792,6 +803,7 @@ $("new").onclick = () => {
     : "Captions are optional. Offline speech recognition supports English and Hindi. Choose the spoken language below.";
   $("importer").showModal();
 };
+$("service").insertAdjacentHTML("beforebegin", chatOptions());
 $("upload").onsubmit = async (e) => {
   e.preventDefault();
   const btn = e.target.querySelector(".primary");
