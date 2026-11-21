@@ -205,6 +205,8 @@ def studio():
         ],
         metrics=list(metrics.values()),
         linked=linked,
+        films=(ROOT / "exports/cinematic_video.mp4").is_file()
+        and (ROOT / "exports/aftertone_short.mp4").is_file(),
         elevenlabs=bool(os.getenv("ELEVENLABS_API_KEY")),
         sarvam=bool(os.getenv("SARVAM_API_KEY")),
         youtube=bool(
@@ -534,6 +536,16 @@ def download_voice(pid, cid, platform):
     )
 
 
+@app.get("/films/<name>")
+def film(name):
+    if name not in ("cinematic_video.mp4", "aftertone_short.mp4", "studio_cut.mp4"):
+        abort(404)
+    path = ROOT / "exports" / name
+    if not path.is_file():
+        abort(404)
+    return send_file(path, conditional=True)
+
+
 @app.get("/download")
 def download():
     buffer = io.BytesIO()
@@ -547,6 +559,7 @@ def download():
             "speech.py",
             "app.py",
             "sources.py",
+            "kinetic.py",
             "narration.py",
             ".env.example",
             "Dockerfile",
@@ -555,6 +568,13 @@ def download():
             ".dockerignore",
         ):
             z.write(ROOT / name, "Aftertone/" + name)
+        for f in (ROOT / "motion").rglob("*"):
+            if f.is_file() and "__pycache__" not in f.parts:
+                z.write(f, "Aftertone/" + str(f.relative_to(ROOT)))
+        for name in ("cinematic_video.mp4", "aftertone_short.mp4", "studio_cut.mp4"):
+            f = ROOT / "exports" / name
+            if f.is_file():
+                z.write(f, "Aftertone/exports/" + name)
         for f in (ROOT / "static").iterdir():
             if f.is_file():
                 z.write(f, "Aftertone/static/" + f.name)

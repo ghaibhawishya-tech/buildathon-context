@@ -3,9 +3,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl fonts-deja
 WORKDIR /studio
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py narration.py sources.py editor.py speech.py media.py engine.py demo.json brief.json README.md .env.example Dockerfile ./
+COPY app.py kinetic.py narration.py sources.py editor.py speech.py media.py engine.py demo.json brief.json README.md .env.example Dockerfile ./
 RUN printf ".runtime\ndata\n.venv\n.env\n__pycache__\n*.zip\n" > .dockerignore
+COPY motion ./motion
 COPY static ./static
+RUN python motion/film.py exports/cinematic_video.mp4 && python motion/film.py --portrait exports/aftertone_short.mp4 && python motion/studio_cut.py
 ENV HOST=0.0.0.0 PORT=8787 AFTERTONE_DATA=/studio/data
 EXPOSE 8787
 CMD ["python","app.py"]

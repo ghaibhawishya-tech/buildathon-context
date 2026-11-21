@@ -61,3 +61,7 @@ Copy .env.example to .env and restart after changing settings.
 - **Performance** uses creator-entered retention from platform analytics. Cross-platform account analytics synchronization is outside this build.
 
 Official references: [Vosk models](https://alphacephei.com/vosk/models), [Sarvam transcription](https://docs.sarvam.ai/api-reference/speech-to-text/transcribe), [Sarvam chat](https://docs.sarvam.ai/api-reference/chat/chat-completions-v1), [YouTube video upload](https://developers.google.com/youtube/v3/docs/videos/insert).
+
+## Motion films
+
+Project brief includes a 36-second Jessica-narrated film, its vertical adaptation, and a 30-second studio export. The source project, timed script, storyboard, font licenses, and rendering commands are in [motion/README.md](motion/README.md). New source exports use kinetic caption highlights and audio-only recordings include a live waveform.

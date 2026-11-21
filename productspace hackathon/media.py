@@ -2,7 +2,9 @@ import os
 import re
 import subprocess
 import tempfile
+import shutil
 from pathlib import Path
+from kinetic import titles
 import imageio_ffmpeg
 import requests
 
@@ -161,20 +163,30 @@ def captions(clip, platform="YouTube"):
 def render(source, clip, directory, platform="YouTube"):
     if round(clip["end"] - clip["start"], 4) < 30:
         raise ValueError("Every generated clip must be at least 30 seconds.")
-    out = directory / (clip["id"] + "-" + platform + ".mp4")
+    out = directory / (clip["id"] + "-" + platform + "-motion.mp4")
     if out.exists():
         return out
     _, video = probe(source)
     with tempfile.TemporaryDirectory(dir=directory) as d:
         temp = Path(d)
-        sub = temp / "captions.srt"
-        sub.write_text(captions(clip, platform))
+        sub = temp / "type.ass"
+        sub.write_text(titles(clip, platform, audio_only=not video))
+        (temp / "fonts").mkdir()
+        shutil.copyfile(
+            Path(__file__).parent / "motion/fonts/BarlowCondensed-Black.ttf",
+            temp / "fonts/display.ttf",
+        )
         inputs = ["-ss", clip["start"], *INPUT_FLAGS, "-i", source]
         if video:
             vf = "[0:v]scale=540:960:force_original_aspect_ratio=decrease,pad=540:960:(ow-iw)/2:(oh-ih)/2:color=0x181920,setsar=1"
         else:
             inputs += ["-loop", "1", "-i", Path(__file__).parent / "static/cover.jpg"]
-            vf = "[1:v]scale=540:960:force_original_aspect_ratio=increase,crop=540:960,setsar=1"
+            vf = (
+                "[1:v]scale=540:960:force_original_aspect_ratio=increase,crop=540:960,setsar=1,"
+                "drawbox=x=0:y=405:w=iw:h=355:color=0x20221f@0.88:t=fill[cover];"
+                "[0:a]aformat=channel_layouts=mono,showwaves=s=464x80:mode=cline:colors=0xffa678:rate=24:scale=sqrt,format=rgba,colorkey=black:0.04:0.0[wave];"
+                "[cover][wave]overlay=x=38:y=666:eof_action=pass"
+            )
         # Relative filter path keeps spaces and punctuation in the workspace path harmless.
         args = [
             FF,
@@ -186,8 +198,7 @@ def render(source, clip, directory, platform="YouTube"):
             "-t",
             str(clip["end"] - clip["start"]),
             "-filter_complex",
-            vf
-            + ",subtitles=captions.srt:force_style='FontSize=13,Alignment=2,MarginV=34,Outline=2'[v]",
+            vf + ",ass=type.ass:fontsdir=fonts[v]",
             "-map",
             "[v]",
             "-map",

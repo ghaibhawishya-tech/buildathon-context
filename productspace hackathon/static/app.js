@@ -120,6 +120,13 @@ function paint() {
     $("main").innerHTML =
       header +
       '</div><article class="briefarticle"><small class="tag">Product Space · Problem 01</small><h2>A repurposing studio with brand memory.</h2><p class="lede">An hour of conversation can hold a single minute worth sharing. The editor’s job is to find it, keep the context, and make it sound like the creator.</p><div class="audionote"><div><strong>Listen to the editorial brief</strong><p>George · ElevenLabs narration</p></div><audio controls preload="metadata" src="/static/brief.mp3"></audio><button id="cutbrief" class="primary">Find a cut in this narration →</button></div><h3>How Aftertone answers the brief</h3><ol><li><b>Ingest a recording.</b> Paste a YouTube or direct media link, or upload a video or podcast in English or Hindi.</li><li><b>Compare directions.</b> Review the emotional arc, source lines, vocal dynamics and cut score before choosing.</li><li><b>Adapt the cut.</b> Finalize a running time, then switch platforms for different caption pacing and copy.</li><li><b>Learn the voice.</b> Saved edits influence wording length, casing and hashtag use in future drafts.</li><li><b>Plan publication.</b> Put an approved cut on the calendar or opt in to a connected YouTube upload.</li><li><b>Learn from results.</b> Enter observed retention to adjust the score of similar emotional arcs.</li></ol><a class="outline" href="https://theproductspace.in/agentic-ai-hackathon/problem-statement" target="_blank" rel="noopener">Read the official brief ↗</a></article>';
+    if (state.films) {
+      const player = document.createElement("section");
+      player.className = "motionfilm";
+      player.innerHTML =
+        '<h3>The editorial film</h3><p>Jessica · 36 seconds</p><video controls playsinline preload="metadata" aria-label="Aftertone editorial film" src="/films/cinematic_video.mp4#t=0.5"></video><div class="actions"><a class="outline" download href="/films/cinematic_video.mp4">Download widescreen</a><a class="outline" download href="/films/aftertone_short.mp4">Download vertical</a><a class="outline" href="/films/studio_cut.mp4">Watch the 30-second studio cut</a></div>';
+      document.querySelector(".briefarticle .audionote").before(player);
+    }
     bind("cutbrief", async () => {
       const { id } = await api("/api/demo", { source: "brief" });
       page = "studio";
@@ -378,18 +385,16 @@ function review(id) {
   beats.className = "beatlist";
   const mid =
     c.rows.length > 2
-      ? c.rows
-          .slice(1, -1)
-          .reduce(
-            (best, row, index) =>
-              Math.abs(c.curve[index + 1] - c.curve[index]) > best.change
-                ? {
-                    index: index + 1,
-                    change: Math.abs(c.curve[index + 1] - c.curve[index]),
-                  }
-                : best,
-            { index: 1, change: -1 },
-          ).index
+      ? c.rows.slice(1, -1).reduce(
+          (best, row, index) =>
+            Math.abs(c.curve[index + 1] - c.curve[index]) > best.change
+              ? {
+                  index: index + 1,
+                  change: Math.abs(c.curve[index + 1] - c.curve[index]),
+                }
+              : best,
+          { index: 1, change: -1 },
+        ).index
       : 0;
   const indices = [...new Set([0, mid, c.rows.length - 1])];
   beats.innerHTML =
