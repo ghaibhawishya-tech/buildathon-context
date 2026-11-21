@@ -68,6 +68,10 @@ function bind(id, fn) {
 }
 const url = (tail = "") => "/api/projects/" + project.id + tail;
 const cuturl = (tail) => url("/" + current.id + tail);
+const isProcessing = (status) =>
+  /^(Reading source|Fetching linked recording|Transcribing|Finding emotional arcs)/.test(
+    status,
+  );
 let activeRefresh = 0,
   progressTimer;
 async function refresh(id) {
@@ -81,13 +85,17 @@ async function refresh(id) {
   }
   const updated = await api("/api/projects/" + pid);
   if (version !== activeRefresh) return;
+  const progress = $("processing-status");
+  const sameImport =
+    project?.id === updated.id && isProcessing(updated.status) && progress;
   project = updated;
-  paint();
-  if (
-    /^(Reading source|Fetching linked recording|Transcribing|Finding emotional arcs)/.test(
-      project.status,
-    )
-  ) {
+  if (sameImport) {
+    if (progress.textContent !== project.status)
+      progress.textContent = project.status;
+  } else {
+    paint();
+  }
+  if (isProcessing(project.status)) {
     progressTimer = setTimeout(
       () => refresh(pid).catch((e) => message(e.message)),
       1400,
@@ -107,6 +115,32 @@ function bars(c) {
     )
     .join("");
 }
+function cutTimeline(clips) {
+  const end = Math.max(...clips.map((clip) => clip.end));
+  return `<section class="cutmap" aria-label="Suggested cut timeline">
+    <div class="cutmap-heading"><span>Cut timeline</span><span>${clips.length} suggested ${clips.length === 1 ? "window" : "windows"}</span></div>
+    <div class="ruler" aria-hidden="true">${[0, 0.25, 0.5, 0.75, 1].map((part) => `<span>${stamp(end * part)}</span>`).join("")}</div>
+    <div class="tracks">${[...clips]
+      .sort((a, b) => a.start - b.start)
+      .map(
+        (clip) => `
+      <div class="track"><button type="button" data-cut="${clip.id}" class="trim"
+        style="--in:${(clip.start / end) * 100}%;--span:${((clip.end - clip.start) / end) * 100}%"
+        aria-label="Review ${esc(clip.title)}, ${stamp(clip.start)} to ${stamp(clip.end)}">
+        <span class="wave" aria-hidden="true">${bars(clip)}</span><span class="trim-name">${esc(clip.arc)}</span>
+      </button></div>`,
+      )
+      .join("")}</div></section>`;
+}
+
+function motionStage() {
+  return `<div class="motion-stage" aria-hidden="true">
+    <div class="stage-orbit"></div><div class="stage-line stage-line-top"></div><div class="stage-line stage-line-bottom"></div>
+    <div class="stage-reel"><div class="film-perfs"></div><div class="reel-image"></div><div class="film-perfs"></div></div>
+    <div class="stage-type"><span>FROM RECORDING TO CLIP</span><strong>60:00<span class="take-arrow">↘</span><em>00:30</em></strong></div><div class="stage-scan"></div>
+  </div>`;
+}
+
 function paint() {
   $("crumb").textContent = pages[page];
   document
@@ -212,15 +246,22 @@ function paint() {
     )
     .join("");
   const source = project.demo ? "ORIGINAL DEMO PODCAST" : "IMPORTED SOURCE";
-  const subtitle = project.demo
-    ? "An audio essay on the stories that survive the edit."
-    : "Review the emotional turns in your recording.";
   const cards = project.clips.filter(
     (c) => filter === "All arcs" || filter === c.arc,
   );
   $("main").innerHTML =
-    header +
-    '</div><section class="hero intake"><div class="art"></div><div class="hero-inner"><span class="meta">SOURCE TO SHORTLIST</span><h2>Find your next cut.</h2><p>Bring a recording. Choose a length. Hear the story before you commit.</p><form id="quick"><label for="linkbox">Recording link</label><div class="linkrow"><input id="linkbox" name="link" type="url" placeholder="Paste a YouTube or media link" required><button class="primary">Find directions →</button></div><div class="quicksettings"><label>Length <input type="number" name="seconds" min="30" max="180" value="30" required> s</label><label>Speech <select name="language"><option value="en-IN">English</option><option value="hi-IN">Hindi</option></select></label></div><output id="quickstatus" role="status"></output></form></div></section><section class="sourcebar"><div><small class="tag">' +
+    `<section class="hero intake">${motionStage()}<div class="hero-inner">
+      <h1>Find the <em>turn.</em></h1>
+      <p>Pull a complete story out of a long recording.</p>
+      <form id="quick"><label class="sr-only" for="linkbox">Recording link</label>
+        <div class="linkrow"><input id="linkbox" name="link" type="url" placeholder="Paste a YouTube or media link" required><button class="primary">Find clips <span aria-hidden="true">↗</span></button></div>
+        <div class="quicksettings">
+          <label>Duration <input type="number" name="seconds" min="30" max="180" value="30" required> sec</label>
+          <label>Speech <select name="language"><option value="en-IN">English</option><option value="hi-IN">Hindi</option></select></label>
+        </div><output id="quickstatus" role="status"></output>
+      </form>
+      ${state.films ? '<button class="film-link" data-page="brief">▶ &nbsp; Watch the editorial film</button>' : ""}
+    </div></section><section class="sourcebar"><div><small class="tag">` +
     source +
     '</small><select id="projects" aria-label="Source recording">' +
     options +
@@ -245,7 +286,9 @@ function paint() {
     (cards
       .map(
         (c, i) =>
-          '<article class="card"><div class="tile ' +
+          '<article class="card" style="--order:' +
+          i +
+          '"><div class="tile ' +
           ["", "teal", "lilac"][i % 3] +
           '" aria-hidden="true"><div class="wave">' +
           bars(c) +
@@ -260,15 +303,22 @@ function paint() {
           stamp(c.end) +
           " &nbsp;·&nbsp; " +
           Math.round(c.end - c.start) +
-          's</div></div><div class="cut"><div class="rating"><strong>' +
+          's</div></div><div class="cut"><div class="rating" style="--score:' +
+          c.score +
+          '"><strong>' +
           c.score +
           '</strong><small>cut score</small></div><button class="action" data-cut="' +
           c.id +
-          '" aria-label="Review moment ' +
+          '" aria-label="Review direction ' +
           (i + 1) +
           '">↗</button></div></article>',
       )
-      .join("") || '<div class="empty">' + esc(project.status) + "</div>") +
+      .join("") ||
+      (isProcessing(project.status)
+        ? '<div class="empty processing"><div class="processing-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div><span id="processing-status" role="status">' +
+          esc(project.status) +
+          "</span></div>"
+        : '<div class="empty">' + esc(project.status) + "</div>")) +
     "</div>" +
     (state.metrics.length
       ? '<div class="actions"><button class="outline" id="rerank">Re-rank using retention</button></div>'
@@ -298,6 +348,10 @@ function paint() {
       project.seconds +
       '" required> seconds</label><button class="outline">Update directions</button>';
     document.querySelector(".listhead").after(toolbar);
+    if (cards.length)
+      toolbar.after(
+        document.createRange().createContextualFragment(cutTimeline(cards)),
+      );
     toolbar.onsubmit = async (e) => {
       e.preventDefault();
       const btn = toolbar.querySelector("button");
@@ -417,6 +471,36 @@ function review(id) {
           "</button>",
       )
       .join("");
+  const preview = $("preview");
+  const transport = document.createElement("div");
+  transport.className = "transport";
+  const duration = c.end - c.start;
+  transport.innerHTML = `<div class="transport-wave" aria-hidden="true"><div class="wave">${bars(c)}</div></div>
+    <input type="range" min="0" max="${duration}" value="0" step=".1" aria-label="Seek within clip"><output>0:00 / ${stamp(duration)}</output>`;
+  const seek = transport.querySelector("input");
+  const time = transport.querySelector("output");
+  preview.after(transport);
+  preview.addEventListener("timeupdate", () => {
+    const elapsed = Math.max(
+      0,
+      Math.min(duration, preview.currentTime - (c.final ? 0 : c.start)),
+    );
+    seek.value = elapsed;
+    transport.style.setProperty("--progress", `${(elapsed / duration) * 100}%`);
+    time.textContent = `${stamp(elapsed)} / ${stamp(duration)}`;
+    let active = -1;
+    for (const index of indices)
+      if (c.rows[index][0] - c.start <= elapsed) active = index;
+    for (const button of beats.querySelectorAll("[data-beat]"))
+      button.classList.toggle(
+        "playing",
+        Number(button.dataset.beat) === active,
+      );
+  });
+  seek.oninput = () => {
+    if (preview.readyState)
+      preview.currentTime = Number(seek.value) + (c.final ? 0 : c.start);
+  };
   beats.onclick = async (e) => {
     const button = e.target.closest("[data-beat]");
     if (!button) return;
@@ -439,6 +523,14 @@ function review(id) {
     await api(cuturl("/finalize"), {});
     current.final = true;
     choosePlatform();
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches)
+      transport.animate(
+        [
+          { boxShadow: "0 0 0 0 #d7ff79a0" },
+          { boxShadow: "0 0 0 16px #d7ff7900" },
+        ],
+        650,
+      );
     await refresh();
     message("Direction finalized. Your captioned export is ready to preview.");
   });
@@ -527,6 +619,7 @@ document.addEventListener("click", async (e) => {
   if (b.dataset.page) {
     page = b.dataset.page;
     paint();
+    window.scrollTo(0, 0);
   }
   if (b.dataset.cut) review(b.dataset.cut);
   if (b.dataset.platform) {
